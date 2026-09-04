@@ -130,15 +130,6 @@
         </div>
       </div>
 
-      <div class="ai-parse hidden" id="taskParseBar">
-        <span class="ai-parse-tag">AI 解析</span>
-        <span id="taskParseText"></span>
-        <div class="ai-parse-actions">
-          <button class="btn mini primary" id="taskParseApply">生成为任务</button>
-          <button class="btn mini ghost" id="taskParseCancel">忽略</button>
-        </div>
-      </div>
-
       <div class="task-list" id="taskList"></div>
       <div class="empty hidden" id="taskEmpty">
         <div class="empty-glyph">☐</div>
@@ -235,15 +226,6 @@
         </div>
       </div>
 
-      <div class="ai-parse hidden" id="ideaParseBar">
-        <span class="ai-parse-tag">语音识别</span>
-        <span id="ideaParseText"></span>
-        <div class="ai-parse-actions">
-          <button class="btn mini primary" id="ideaParseApply">保存灵感</button>
-          <button class="btn mini ghost" id="ideaParseCancel">忽略</button>
-        </div>
-      </div>
-
       <div class="idea-board" id="ideaBoard"></div>
       <div class="empty hidden" id="ideaEmpty">
         <div class="empty-glyph">✎</div>
@@ -264,7 +246,9 @@
 
   <!-- 语音指示浮标 -->
   <div class="listen-pill hidden" id="listenPill">
-    <span class="pulse"></span><span id="listenPillText">正在聆听…</span>
+    <span class="pulse"></span>
+    <span id="listenPillText">正在聆听…</span>
+    <button class="pill-stop" id="pillStop" title="停止">■</button>
   </div>
 
   <!-- 安装提示 -->
@@ -279,6 +263,45 @@
 
   <!-- Toast -->
   <div class="toast-wrap" id="toastWrap"></div>
+</div>
+
+<!-- ============ 弹窗：语音识别结果确认 ============ -->
+<div class="modal-mask hidden" id="voiceModal">
+  <div class="modal voice-modal">
+    <div class="modal-head">
+      <span class="voice-modal-tag" id="voiceModalTag">🎤 语音识别结果</span>
+      <button class="modal-x" id="voiceModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <h3 class="voice-modal-title" id="voiceModalTitle">确认内容</h3>
+      <div id="voiceModalBody"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="voiceModalCancel">取消</button>
+      <button class="btn primary" id="voiceModalOk">✓ 确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：资讯详情 ============ -->
+<div class="modal-mask hidden" id="newsModal">
+  <div class="modal news-modal">
+    <div class="modal-head news-modal-head">
+      <span class="news-modal-badge">资讯全文</span>
+      <button class="modal-x" id="newsModalClose">×</button>
+    </div>
+    <div class="news-modal-scroll">
+      <div class="news-modal-body">
+        <h2 class="news-modal-title" id="newsTitle"></h2>
+        <div class="news-modal-meta" id="newsDetailMeta"></div>
+        <div class="news-modal-heat" id="newsDetailHeat"></div>
+        <div class="news-modal-article" id="newsDetailBody"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="newsModalClose2">收起</button>
+    </div>
+  </div>
 </div>
 
 <!-- ============ 弹窗：手动添加任务 ============ -->

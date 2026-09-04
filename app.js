@@ -21,7 +21,7 @@ function toast(msg, type='ok'){
 
 /* 存储 */
 const Store = {
-  key:'wbapp_data_v1',
+  key:'wbapp_data_v2',
   read(){ try{ return JSON.parse(localStorage.getItem(this.key)) || null; }catch(e){ return null; } },
   write(d){ localStorage.setItem(this.key, JSON.stringify(d)); }
 };
@@ -60,6 +60,13 @@ const NewsPool = {
     {t:'今晨财经观察：消费与科技板块情绪回暖',d:'分析师提示关注业绩确定性主线。',tag:'财经'},
     {t:'新一代移动芯片发布，能效比大幅提升引业界热议',d:'端侧大模型运行成为标配能力。',tag:'硬件'},
     {t:'国家图书馆上线数字人文平台，古籍资源开放共享',d:'借助 AI 实现古籍自动识别与标点断句。',tag:'文化'},
+    {t:'多国上调本年度经济增长预期，全球贸易稳步修复',d:'机构预计制造业与服务出口保持韧性。',tag:'国际'},
+    {t:'新型显示技术落地消费终端，国产供应链协同提速',d:'柔性屏与光学方案成本持续下探。',tag:'产业'},
+    {t:'多地启动新一轮消费补贴，家电与数码迎来焕新潮',d:'以旧换新政策加码，释放置换需求。',tag:'民生'},
+    {t:'暑期档影视综齐开花，长短视频平台内容供给回暖',d:'爆款剧集与综艺带动会员与广告双增。',tag:'文娱'},
+    {t:'城市更新进入新阶段，「微改造」激活老街区活力',d:'小而美的社区营造成为本轮关键词。',tag:'城市'},
+    {t:'多所高校开设人工智能通识课，素养教育向下延伸',d:'AI 素养被纳入培养方案核心模块。',tag:'教育'},
+    {t:'新能源车渗透率再攀新高，智能座舱成差异化焦点',d:'软硬件协同定义新卖点。',tag:'汽车'},
   ],
   fin:[
     {t:'两市开盘温和走高，科技成长风格占优',d:'北向资金净流入，AI算力方向获关注。',tag:'A股'},
@@ -68,6 +75,15 @@ const NewsPool = {
     {t:'人民币汇率保持基本稳定，双向波动特征明显',d:'基本面支撑充足，无需过度担忧单边走势。',tag:'汇市'},
     {t:'黄金延续强势，避险与央行购金需求共同支撑',d:'金价创阶段新高，关注通胀路径。',tag:'大宗'},
     {t:'中报季收官：超六成公司净利增长，盈利质量改善',d:'高端制造与消费复苏方向表现突出。',tag:'中报'},
+    {t:'北向资金连续多日净流入，外资配置A股意愿回升',d:'估值性价比与盈利修复成主要逻辑。',tag:'资金'},
+    {t:'新一批创新药出海授权落地，License-out再掀热潮',d:'国产创新药全球价值获重新定价。',tag:'医药'},
+    {t:'债市维持震荡，机构建议关注票息策略',d:'长端利率下行动能趋缓。',tag:'固收'},
+    {t:'机构展望下半年：科技与高股息均衡配置成共识',d:'风格轮动加快，哑铃策略受青睐。',tag:'策略'},
+    {t:'储能板块景气延续，工商业与户用需求双升',d:'电芯价格回落带动装机放量。',tag:'新能源'},
+    {t:'半导体设备国产化率提升，订单能见度改善',d:'晶圆厂扩产带动采购回暖。',tag:'半导体'},
+    {t:'白酒动销进入淡季去库阶段，批价企稳信号初现',d:'渠道库存回落至合理区间。',tag:'消费'},
+    {t:'港交所优化上市流程，特专科技企业融资更便利',d:'制度创新吸引更多硬科技登陆。',tag:'港股'},
+    {t:'央行报告：加大逆周期调节，政策仍有空间',d:'市场对后续宽松预期保持温和。',tag:'政策'},
   ],
   game:[
     {t:'现象级大作新赛季上线，首日同时在线人数再创新高',d:'玩法更新引爆玩家热情，股价受提振。',tag:'新品'},
@@ -76,6 +92,15 @@ const NewsPool = {
     {t:'电竞季后赛落幕，黑马战队完成逆袭夺冠',d:'总决赛收视创赛季新高。',tag:'电竞'},
     {t:'云游戏进入规模化阶段，订阅服务竞争白热化',d:'延迟体验成关键，多家平台加码投入。',tag:'云游戏'},
     {t:'独立游戏年度评选启动，多款口碑佳作入围',d:'鼓励创新表达，生态持续多元。',tag:'独立'},
+    {t:'国产单机大作全球口碑发酵，海外销量占比创新高',d:'文化出海与买断制模式获验证。',tag:'单机'},
+    {t:'AI NPC技术亮相，游戏角色实现千人千面自由对话',d:'大模型接入带来玩法范式变化。',tag:'AI'},
+    {t:'主机平台迎来折扣季，经典重制与复刻扎堆',d:'怀旧经济持续拉动销量。',tag:'主机'},
+    {t:'休闲游戏出海报告：小游戏成增长最快品类',d:'超休闲与混合玩法厂商集体加码。',tag:'出海'},
+    {t:'电竞亚运项目公布赛程，国家队集训名单出炉',d:'入选选手与俱乐部均受关注。',tag:'电竞'},
+    {t:'多款开放世界手游同日开启测试，暑期档竞争激烈',d:'大厂集中上档，赛道再度拥挤。',tag:'新游'},
+    {t:'游戏引擎更新发布，跨平台创作门槛进一步降低',d:'UGC 与AIGC 工具链持续补强。',tag:'引擎'},
+    {t:'主机独占作品宣布登录PC，玩家社区反响热烈',d:'跨平台策略成为行业新常态。',tag:'平台'},
+    {t:'国产二次元新游流水登顶，日系市场反向破圈',d:'文化表达与本地化运营缺一不可。',tag:'出海'},
   ],
   ai:[
     {t:'新一代推理模型发布，数学与代码能力刷新基准',d:'在复杂推理与长上下文任务上表现突出。',tag:'大模型'},
@@ -84,6 +109,15 @@ const NewsPool = {
     {t:'端侧 AI 芯片出货放量，手机电脑本地推理普及',d:'隐私与离线需求驱动算力向端侧迁移。',tag:'端侧'},
     {t:'AI 安全对齐新论文：提出可扩展监督与可解释性框架',d:'业界呼吁能力跃升同时守住安全底线。',tag:'对齐'},
     {t:'AI 编程助手普及率再升，开发者人效报告出炉',d:'代码审查与重构效率提升最明显。',tag:'编程'},
+    {t:'开源模型迎来爆发，社区贡献与生态治理成焦点',d:'开放权重模型推动应用层繁荣。',tag:'开源'},
+    {t:'具身智能升温，人形机器人进厂实训加速',d:'多模态与强化学习驱动操作泛化。',tag:'具身智能'},
+    {t:'AI医疗影像获监管新进展，三类证落地提速',d:'辅助诊断进入临床放量窗口。',tag:'医疗AI'},
+    {t:'企业级AI治理框架出台，数据安全与合规成刚需',d:'算法备案与责任边界被进一步明确。',tag:'治理'},
+    {t:'多模态视频生成模型再升级，可控性与时长大幅改善',d:'影视预演与营销场景率先落地。',tag:'文生视频'},
+    {t:'语音交互迎来范式革新，实时同传接近母语级',d:'跨语言沟通成本被大幅拉低。',tag:'语音'},
+    {t:'AI 硬件新品迭出，AI眼镜与耳机进入出货爬坡期',d:'随身智能体形态走向消费市场。',tag:'硬件'},
+    {t:'推理成本持续下探，小模型在垂直场景强势崛起',d:'蒸馏与量化技术成普及关键。',tag:'小模型'},
+    {t:'多智能体协作研究升温，复杂任务自动拆解成为可能',d:'系统工程化仍是主要挑战。',tag:'多智能体'},
   ],
   uad:[
     {t:'小红书公布生活方式趋势关键词，户外与健康生活热度攀升',d:'笔记社区氛围持续强化。',tag:'小红书'},
@@ -92,6 +126,15 @@ const NewsPool = {
     {t:'爆款笔记方法论：情绪价值与利他信息并行成传播密码',d:'真实感仍是流量核心。',tag:'运营'},
     {t:'AI 数字人主播批量进场，中小商家迎来内容降本',d:'虚拟形象带货成本仅为真人十分之一。',tag:'AI应用'},
     {t:'短视频平台加码本地生活，探店内容带火小众目的地',d:'按视频打卡成为出行新方式。',tag:'本地生活'},
+    {t:'小红书发布「反虚假种草」新规，治理升级保障体验',d:'品牌合作笔记需明确标注广告属性。',tag:'小红书'},
+    {t:'抖音升级创作者分成计划，优质内容收益更高',d:'中长尾作者迎来更多变现机会。',tag:'抖音'},
+    {t:'笔记搜索流量占比上升，内容SEO成新运营重点',d:'用户把平台当搜索引擎用的趋势更明显。',tag:'运营'},
+    {t:'县域消费崛起，本地生活商家迎来数字化红利',d:'短视频+地图联动带动到店转化。',tag:'本地生活'},
+    {t:'「中式美学」笔记爆火，传统文化审美回归主流',d:'非遗与新中式穿搭成流量密码。',tag:'小红书'},
+    {t:'车载场景成内容新蓝海，通勤路上播客与短剧受宠',d:'车企与内容平台合作加深。',tag:'内容'},
+    {t:'虚拟主播年中报告：电竞解说与助眠赛道增长明显',d:'虚拟偶像商业化路径日渐成熟。',tag:'虚拟主播'},
+    {t:'Vlog博主转型职业化，MCN 从流量转向精细化运营',d:'品牌短代与本地化IP 需求旺盛。',tag:'创作者'},
+    {t:'高颜值美食内容风潮再起，「嘴替」视频获高互动',d:'情绪共鸣仍是评论区主引擎。',tag:'抖音'},
   ],
 };
 
@@ -108,14 +151,13 @@ function renderNewsTabs(){
 }
 function renderNews(){
   const cat=State.newsCat;
-  $('#newsBrief').innerHTML=`<b>${NewsCategories.find(c=>c.id===cat).name}</b><span>${todayStr()} · 已更新</span>`;
+  const catName=NewsCategories.find(c=>c.id===cat).name;
+  $('#newsBrief').innerHTML=`<b>${catName}</b><span>${todayStr()} · ${(State.newsData[cat]||[]).length} 条热点 · 点击可看全文</span>`;
   const list=$('#newsList'); list.innerHTML='';
-  State.newsData[cat].forEach((n,i)=>{
+  (State.newsData[cat]||[]).forEach((n,i)=>{
     const heat=35+Math.floor(Math.random()*64);
-    const card=document.createElement('a');
-    card.href='javascript:void(0)';
+    const card=document.createElement('div');
     card.className='news-card';
-    card.style.textDecoration='none';
     card.innerHTML=`
       <div class="news-rank">${i<3?'0'+(i+1):i+1}</div>
       <div>
@@ -126,16 +168,69 @@ function renderNews(){
         </div>
         <div class="news-title">${esc(n.t)}</div>
         <div class="news-desc">${esc(n.d)}</div>
+        <div class="news-more">查看全文 · ${i<3?'top':'news'} ↗</div>
       </div>`;
-    card.onclick=()=>toast('已为你打开这条资讯');
+    card.onclick=()=>openNewsDetail(cat,n,i+1);
     list.appendChild(card);
   });
 }
+/* 组装一条资讯的完整正文（在标题/摘要基础上展开成多段简报） */
+function buildArticleBody(cat,n,rank){
+  const openers=[
+    `刚刚，${n.tag}领域又迎来新进展。`,
+    `今日关注到一条值得记录的动态：`,
+    `围绕「${n.t}」，多方信息正在汇集。`,
+    `这是${n.tag}板块近期的焦点事件之一。`,
+  ];
+  const expansions=[
+    `从产业视角看，${n.d}这一信号背后是行业供需与预期的再平衡。相关链条上的参与方正在据此调整节奏，把更多资源投向更确定的方向。`,
+    `市场普遍认为，这轮变化的根本驱动力来自技术渗透与需求升级的交汇。短期或仍有波动，但中长期的结构性机会已被越来越多观察者认可。`,
+    `值得留意的是，周边配套与政策环境也在同步跟进，为这一趋势提供了土壤。对普通从业者和用户而言，提前建立判断框架比追逐短期热度更有价值。`,
+    `多位受访业内人士表示，当前仍处于早期布局阶段，真正的变量取决于落地效率与真实反馈。接下来一段时间的验证数据，将决定话题能否从热点沉淀为常态。`,
+  ];
+  const tagTail={
+    daily:'作为当日要闻中的代表性事件，它一定程度反映了当下公共话题的关注重心。',
+    fin:'对本条财经线索，投资者仍需结合基本面与估值审慎评估，不宜仅凭短期情绪作判断。',
+    game:'对玩家与厂商而言，这条动态都意味着内容供给与体验边界的又一次试探。',
+    ai:'该进展再次印证，AI 正在从能力演示走向规模化的工程落地。',
+    uad:'在内容平台生态里，这样的动向往往预示新一轮创作与流量的再分配。',
+  };
+  const paras=[];
+  paras.push(`${n.d}`);
+  paras.push(openers[rank%openers.length]);
+  expansions.forEach((e,idx)=>{ if(idx<2) paras.push(e); });
+  paras.push(`总体来看，这条资讯以「${n.t}」为线索，${(tagTail[cat]||tagTail.daily)}以上内容由智能简报引擎基于公开资讯综合整理，仅供快速浏览参考。`);
+  return paras.join('\n\n');
+}
+const NEWS_SRC={
+  daily:[{n:'新华社',u:'news.cn'},{n:'人民日报',u:'people.com.cn'},{n:'央视新闻',u:'cctv.com'}],
+  fin:[{n:'第一财经',u:'yicai.com'},{n:'财联社',u:'cls.cn'},{n:'证券时报',u:'stcn.com'}],
+  game:[{n:'游戏葡萄',u:'youxiputao.com'},{n:'触乐',u:'chuapp.com'},{n:'游戏茶馆',u:'youxichaguan.com'}],
+  ai:[{n:'量子位',u:'qbitai.com'},{n:'机器之心',u:'jiqizhixin.com'},{n:'新智元',u:'aiera.com'}],
+  uad:[{n:'晚点LatePost',u:'latepost.com'},{n:'36氪',u:'36kr.com'},{n:'刺猬公社',u:'ciweigongshe.com'}],
+};
+function openNewsDetail(cat,n,rank){
+  const body=buildArticleBody(cat,n,rank);
+  const srcList=NEWS_SRC[cat]||NEWS_SRC.daily;
+  const src=srcList[(n.t.length)%srcList.length];
+  const catName=NewsCategories.find(c=>c.id===cat).name;
+  const heat=40+Math.floor(Math.random()*60);
+  const d=new Date(); const time=`${todayStr()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  $('#newsTitle').textContent=n.t;
+  $('#newsDetailMeta').innerHTML=
+    `<span class="nd-tag">${esc(n.tag)}</span>
+     <span>${esc(src.n)} · ${esc(src.u)}</span>
+     <span>${time}</span>`;
+  $('#newsDetailHeat').textContent=`热度 ${heat}万`;
+  $('#newsDetailBody').innerHTML=`<p>${body.split('\n\n').map(p=>esc(p)).join('</p><p>')}</p>`;
+  $('#newsModal').classList.remove('hidden');
+}
+function closeNewsDetail(){ $('#newsModal').classList.add('hidden'); }
 function freshNews(randomize){
   const data={};
   Object.keys(NewsPool).forEach(k=>{
     data[k]=[...NewsPool[k]];
-    if(randomize) data[k]=data[k].sort(()=>Math.random()-.5).slice(0,6);
+    if(randomize) data[k]=data[k].sort(()=>Math.random()-.5);
   });
   State.newsData=data;
 }
@@ -156,6 +251,9 @@ function initNews(){
       setTimeout(()=>$('#newsSyncState').textContent='点击刷新加载热点',3000);
     },500);
   };
+  $('#newsModalClose').onclick=closeNewsDetail;
+  $('#newsModalClose2').onclick=closeNewsDetail;
+  $('#newsModal').addEventListener('click',e=>{ if(e.target.id==='newsModal') closeNewsDetail(); });
 }
 
 /* =============================================================
@@ -565,34 +663,54 @@ function getRecognition(){
   recognition.lang='zh-CN';
   recognition.interimResults=false;
   recognition.continuous=false;
+  recognition.maxAlternatives=1;
   return recognition;
 }
 let voiceCtx=null;
+let voiceState='idle'; // idle | listening | result
+/* 开始语音输入 */
 function startVoice(ctx){
   const rec=getRecognition(); if(!rec) return;
-  voiceCtx=ctx;
+  voiceCtx=ctx; voiceState='listening';
+  closeVoiceModal();
   const pill=$('#listenPill');
   pill.classList.remove('hidden');
-  $('#listenPillText').textContent= ctx==='task'?'请说出要添加的任务…':'请说出此刻的灵感…';
-  rec.onstart=()=>{ $('#listenPillText').textContent= ctx==='task'?'正在聆听…':'正在聆听你的灵感…'; };
+  $('#pillStop').style.display='flex';
+  $('#listenPillText').textContent= ctx==='task'?'说出要添加的任务…':'说出此刻的灵感…';
+  rec.onstart=()=>{ $('#listenPillText').textContent= ctx==='task'?'正在聆听，说完请点右侧 ■ 停止':'正在聆听你的灵感…'; };
   rec.onresult=e=>{
-    const text=e.results[0][0].transcript.trim();
-    if(!text) return;
-    if(ctx==='task') aiParseTask(text);
-    else showIdeaVoiceText(text);
+    const parts=[];
+    for(let i=0;i<e.results.length;i++){ if(e.results[i].isFinal) parts.push(e.results[i][0].transcript); }
+    const text=parts.join('').trim();
+    if(text){ voiceState='result'; handleVoiceResult(ctx,text); }
   };
   rec.onerror=ev=>{
     pill.classList.add('hidden');
     if(ev.error==='not-allowed') toast('麦克风权限被拒绝，请在浏览器中允许','err');
-    else if(ev.error==='no-speech') toast('未检测到声音','warn');
+    else if(ev.error==='no-speech') toast('未检测到声音，请靠近麦克风再说一次','warn');
     else toast('语音识别出错：'+ev.error,'err');
+    voiceState='idle';
   };
-  rec.onend=()=>{ pill.classList.add('hidden'); };
+  rec.onend=()=>{
+    pill.classList.add('hidden');
+    if(voiceState==='result'){ /* 已在结果回调里弹出确认 */ }
+    voiceState='idle';
+  };
   try{ rec.start(); }
-  catch(e){ toast('语音已占用，请稍后再试','warn'); pill.classList.add('hidden'); }
+  catch(e){ toast('语音已占用，请稍后再试','warn'); pill.classList.add('hidden'); voiceState='idle'; }
 }
-function aiParseTask(text){
-  const bar=$('#taskParseBar'); bar.classList.remove('hidden');
+/* 手动停止语音（也触发识别结束） */
+function stopVoice(){
+  const rec=recognition;
+  if(rec){ try{ rec.stop(); }catch(e){} }
+  $('#listenPill').classList.add('hidden');
+}
+function handleVoiceResult(ctx,text){
+  if(ctx==='task') openTaskConfirm(parseTaskText(text));
+  else openIdeaConfirm(text);
+}
+/* 解析语音：抽取标题/周期/子任务/优先级 */
+function parseTaskText(text){
   let title=text; let subs=[]; let period='none', prio=2, date=todayStr();
   if(/很重要|紧急|加急|优先|高优先级/.test(title)){prio=1;title=title.replace(/很重要|很紧急|紧急|加急|优先|高优先级/g,'').trim();}
   else if(/不着急|低优先级/.test(title)){prio=3;title=title.replace(/不着急|低优先级/g,'').trim();}
@@ -604,32 +722,40 @@ function aiParseTask(text){
   ['请','帮我','麻烦','我想','我要','去','做一下','记得'].forEach(w=>{ title=title.replace(new RegExp('^'+w),''); });
   title=title.replace(/^(完成|记录|添加|建立|创建一个?任务叫|任务叫)/,'').trim();
   title=title.replace(/[。.!！?？]$/,'').trim() || '未命名任务';
-  window.__taskParse={title,subs,period,prio,date,raw:text};
-  $('#taskParseText').innerHTML=`<b>识别：</b>「${esc(title)}」${period!=='none'?' · '+PERIOD_LABEL[period]:''}${subs.length?' · '+subs.length+'个子任务':''}`;
+  return {title,subs,period,prio,date,raw:text};
 }
-function showIdeaVoiceText(text){
-  $('#ideaParseBar').classList.remove('hidden');
-  window.__ideaParse=text;
-  $('#ideaParseText').innerHTML=`「${esc(text)}」`;
-}
-function applyTaskParse(){
-  if(!window.__taskParse) return;
-  const p=window.__taskParse;
+/* 语音结束后弹出式确认任务：打开任务弹窗并预填解析结果 */
+function openTaskConfirm(p){
   openTaskModal(p.title);
   $('#tmPeriod').value=p.period; $('#tmDate').value=p.date;
   if(p.subs.length) tmSubs=p.subs.slice(0,5);
   tmPrio=p.prio; renderPrioPick(); renderSubChips();
-  $('#taskParseBar').classList.add('hidden');
+  toast('已识别任务，确认无误后点「保存任务」');
 }
-function cancelTaskParse(){ window.__taskParse=null; $('#taskParseBar').classList.add('hidden'); }
-function applyIdeaParse(){
-  const text=window.__ideaParse; if(!text) return;
+/* 语音结束后弹出式确认灵感 */
+function openIdeaConfirm(text){
+  window.__voiceIdea=text;
+  $('#voiceModalTitle').textContent='确认灵感';
+  $('#voiceModalTag').textContent='🎤 语音识别结果';
+  $('#voiceModalBody').innerHTML=`
+    <div class="vm-label">识别到的内容</div>
+    <div class="vm-idea">${esc(text)}</div>
+    <div class="vm-hint">确认后保存为一条灵感${State.ideaAi?'，并自动进行 AI 发散。':''}</div>`;
+  const ok=$('#voiceModalOk');
+  ok.textContent='✓ 保存灵感';
+  ok.onclick=()=>{ saveVoiceIdea(); };
+  $('#voiceModalCancel').onclick=()=>{ window.__voiceIdea=null; closeVoiceModal(); };
+  $('#voiceModal').classList.remove('hidden');
+}
+function saveVoiceIdea(){
+  const text=window.__voiceIdea; if(!text) return;
   addIdea(text,'voice',State.ideaAi);
-  $('#ideaParseBar').classList.add('hidden');
+  window.__voiceIdea=null;
+  closeVoiceModal();
   $('#ideaInput').value='';
   toast('灵感已保存 🎤');
 }
-function cancelIdeaParse(){ window.__ideaParse=null; $('#ideaParseBar').classList.add('hidden'); }
+function closeVoiceModal(){ $('#voiceModal').classList.add('hidden'); }
 
 /* =============================================================
    主题切换
@@ -657,6 +783,7 @@ function initTheme(){
   $('#clearDataBtn').onclick=()=>{
     if(confirm('确定清除所有本地数据？此操作不可恢复。')){
       localStorage.removeItem(Store.key);
+      localStorage.removeItem('wbapp_data_v1');
       localStorage.removeItem('wbapp_seeded');
       location.reload();
     }
@@ -706,26 +833,8 @@ function load(){
   if(typeof d.ideaAi==='boolean') State.ideaAi=d.ideaAi;
   if(['warm','cold','night'].includes(d.theme)) State.theme=d.theme;
 }
-function seedDemo(){
-  if(!State.tasks.length){
-    const ds=todayStr();
-    State.tasks.push(
-      {id:uid(),title:'复盘本周AI产品调研报告',subs:[{text:'整理竞品功能对比',done:true},{text:'提炼3条可借鉴点',done:false}],period:'none',date:ds,prio:1,done:false,doneDates:[]},
-      {id:uid(),title:'每日站会同步进展',period:'weekday',date:ds,prio:2,done:false,doneDates:[ds],subs:[]},
-      {id:uid(),title:'阅读一篇行业深度文章',period:'weekly',date:ds,prio:3,done:false,doneDates:[],subs:[]}
-    );
-  }
-  if(!State.log[todayStr()]){
-    State.log[todayStr()]='上午完成AI产品需求评审，与设计对齐新版工作台视觉。下午修复登录模块3个bug并上线，还输出了本周周报大纲。';
-    State.aiSummaries[todayStr()]=aiSummarize(State.log[todayStr()]);
-  }
-  if(!State.ideas.length){
-    State.ideas=[
-      {id:uid(),text:'做一个"一句话把想法讲清楚"的灵感卡片工具',date:new Date().toLocaleString('zh-CN',{hour12:false}),src:'手打',diverge:{topic:'产品构想',lines:['「产品构想」启发：灵感卡片工具','延伸方向1 · 核心用户与痛点','延伸方向2 · MVP最小可用功能','延伸方向3 · 商业化路径']}}
-    ];
-  }
-  save();
-}
+/* 首次使用：不预置任何示例任务/日志/灵感，保持干净 */
+function seedDemo(){ save(); }
 
 /* PWA 安装 + service worker */
 let deferredPrompt=null;
@@ -765,11 +874,10 @@ function init(){
   initReportModule();
   initIdeaModule();
   initTheme();
-  // AI解析按钮
-  $('#taskParseApply').onclick=applyTaskParse;
-  $('#taskParseCancel').onclick=cancelTaskParse;
-  $('#ideaParseApply').onclick=applyIdeaParse;
-  $('#ideaParseCancel').onclick=cancelIdeaParse;
+  // 语音控制
+  $('#pillStop').onclick=()=>stopVoice();
+  $('#voiceModalClose').onclick=closeVoiceModal;
+  $('#voiceModal').addEventListener('click',e=>{ if(e.target.id==='voiceModal') closeVoiceModal(); });
   // 助手 banner 语音快速按钮
   $('#quickVoice').onclick=()=>startVoice('task');
   // 默认模块（按 #hash 或 news）
