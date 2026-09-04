@@ -38,7 +38,8 @@ const State = {
   aiSummaries:{},
   ideas: [],
   ideaAi:true,
-  aiConfig:{ baseUrl:'', key:'', model:'', useLLM:false, timeout:15000 },
+  aiModels:[],
+  githubRepo:'',
   calYear:new Date().getFullYear(),
   calMonth:new Date().getMonth(),
   theme:'warm',
@@ -374,48 +375,56 @@ function renderNewsCatEditor(){
   });
   bindNewsCatSort();
 }
-/* 拖拽排序：基于 Pointer 事件，兼容鼠标与触屏；落点后把 DOM 顺序写回 State.newsCats */
+/* 拖拽排序：基于 Pointer 事件，用 translateY 在原列表内拖拽，不会跑出屏幕 */
 function bindNewsCatSort(){
   const list=$('#newsCatList'); if(!list) return;
-  let dragRow=null, offsetY=0;
+  let dragRow=null, placeholder=null, startY=0, startTop=0, listRect=null;
   function onDown(e, row){
     e.preventDefault();
     dragRow=row;
-    const r=row.getBoundingClientRect();
-    offsetY=e.clientY - r.top;
+    listRect=list.getBoundingClientRect();
+    startY=e.clientY;
+    startTop=row.getBoundingClientRect().top;
+    // 占位符保持列表高度不变
+    placeholder=document.createElement('div');
+    placeholder.style.height=row.offsetHeight+'px';
+    placeholder.style.marginBottom='8px';
+    placeholder.style.borderRadius='12px';
+    placeholder.style.background='var(--paper-2)';
+    placeholder.style.border='2px dashed var(--accent-2)';
+    placeholder.style.opacity='.5';
+    row.parentNode.insertBefore(placeholder, row);
     row.classList.add('nc-dragging');
-    row.style.width=r.width+'px';
-    row.style.position='fixed';
-    row.style.left=r.left+'px';
-    row.style.zIndex='1000';
-    row.style.pointerEvents='none';
     document.body.style.userSelect='none';
-    moveRow(e.clientY);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp, {once:true});
   }
-  function moveRow(cy){
+  function onMove(e){
     if(!dragRow) return;
-    const r=dragRow.getBoundingClientRect();
-    dragRow.style.top=(cy-offsetY)+'px';
-    dragRow.style.left=r.left+'px';
+    const delta=e.clientY-startY;
+    dragRow.style.transform=`translateY(${delta}px)`;
+    // 根据鼠标位置把占位符插到目标位置
     const sibs=[...list.querySelectorAll('.nc-row')].filter(x=>x!==dragRow);
     let target=null;
     for(const s of sibs){
       const rc=s.getBoundingClientRect();
-      if(cy < rc.top + rc.height/2){ target=s; break; }
+      if(e.clientY < rc.top + rc.height/2){ target=s; break; }
     }
-    if(target) list.insertBefore(dragRow, target);
-    else list.appendChild(dragRow);
+    if(target) list.insertBefore(placeholder, target);
+    else list.appendChild(placeholder);
   }
-  function onMove(e){ moveRow(e.clientY); }
   function onUp(){
     window.removeEventListener('pointermove', onMove);
     if(!dragRow) return;
     dragRow.classList.remove('nc-dragging');
-    dragRow.style.position=''; dragRow.style.top=''; dragRow.style.left='';
-    dragRow.style.zIndex=''; dragRow.style.width=''; dragRow.style.pointerEvents='';
+    dragRow.style.transform='';
     document.body.style.userSelect='';
+    // 把 dragRow 插回占位符位置
+    if(placeholder && placeholder.parentNode){
+      placeholder.parentNode.insertBefore(dragRow, placeholder);
+      placeholder.remove();
+    }
+    placeholder=null;
     const order=[...list.querySelectorAll('.nc-row')].map(x=>x.dataset.id);
     if(State.newsCats && State.newsCats.length){
       State.newsCats.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
@@ -794,14 +803,9 @@ function aiSummarize(text){
   const catCount={};
   clauses.forEach(({clean})=>{ for(const [re,label] of catMap){ if(new RegExp(re).test(clean)){ catCount[label]=(catCount[label]||0)+1; break; } } });
   Object.keys(catCount).forEach(k=>{ if(catCount[k]>topN){topN=catCount[k];topCat=k;} });
-  // 明日计划：遗留项优先闭环，进行项持续推进
-  const next=[];
-  issue.slice(0,3).forEach(s=>next.push(`优先闭环：${stripTag(s).replace(/。$/,'')}，明确责任人与时间点`));
-  progress.slice(0,2).forEach(s=>next.push(`继续推进：${stripTag(s).replace(/。$/,'')}`));
-  if(!next.length) next.push('保持当前节奏，提前梳理明日待办并按优先级排定顺序');
   const kpis=[{l:'完成事项',v:doneN+'项'},{l:'今日工作量',v:total+'条'},{l:'成果完成率',v:progressRate+'%'}];
-  const summary=`今日共梳理 ${total} 项工作，重心落在「${topCat}」方向，已闭环 ${doneN} 项${numbers?`，涉及「${numList.slice(0,4).join('、')}」等可量化产出`:''}。${issue.length?`当前存在 ${issue.length} 项待跟进问题（${stripTag(issue[0]).replace(/。$/,'')}），需在明日优先处理；`:'推进过程未出现明显阻塞；'}${progress.length?`另有 ${progress.length} 项工作处于进行中，建议保持连续性并在下一节点同步进展。`:'各项工作均已形成明确结果。'}整体产出${doneN>=3?'较为饱满':'仍有提升空间'}，明日重点建议围绕遗留问题与未完成事项展开。`;
-  return {kpis, done, progress, issue, comm, next, summary, raw:clauses.map(c=>c.clean)};
+  const summary=`今日共梳理 ${total} 项工作，重心落在「${topCat}」方向，已闭环 ${doneN} 项${numbers?`，涉及「${numList.slice(0,4).join('、')}」等可量化产出`:''}。${issue.length?`当前存在 ${issue.length} 项待跟进问题（${stripTag(issue[0]).replace(/。$/,'')}），建议优先处理；`:'推进过程未出现明显阻塞；'}${progress.length?`另有 ${progress.length} 项工作处于进行中，建议保持连续性并在下一节点同步进展。`:'各项工作均已形成明确结果。'}整体产出${doneN>=3?'较为饱满':'仍有提升空间'}。`;
+  return {kpis, done, progress, issue, comm, summary, raw:clauses.map(c=>c.clean)};
 }
 function dedup(arr){ return [...new Set(arr)]; }
 function renderAiSummary(ds){
@@ -816,7 +820,6 @@ function renderAiSummary(ds){
     ${block('二、进行中 / 推进',s.progress)}
     ${block('三、问题与待办',s.issue)}
     ${block('四、沟通与协作',s.comm)}
-    ${block('五、明日计划',s.next||[])}
     <div class="sum-head">总体小结</div>
     <div class="sum-text">${esc(s.summary)}</div>`;
 }
@@ -885,20 +888,65 @@ function renderTodayEntries(){
   });
   const c=$('#logEntriesCount'); if(c) c.textContent=arr.length;
 }
+/* 计算总结：优先大模型，失败回退内置启发式 */
+async function computeSummary(text){
+  const cfg=getActiveAiModel();
+  if(cfg){
+    try{
+      const res=await callLLMSummarize(text, cfg);
+      if(res && res.summary) return res;
+    }catch(e){ console.warn('大模型总结失败，回退内置：', e&&e.message); }
+  }
+  return aiSummarize(text);
+}
+/* 调用 OpenAI 兼容大模型做工作总结 */
+async function callLLMSummarize(text, cfg){
+  const sys='你是一位资深职场日报助手。请根据用户提供的今日工作条目，生成结构化的工作日报，必须包含以下四个部分（不要出现明日计划）：\n一、今日完成：列出已完成的事项，每条带【话题标签】。\n二、进行中/推进：列出正在推进的工作。\n三、问题与待办：列出遇到的问题和待跟进事项。\n四、沟通与协作：列出会议、沟通、协作类事项。\n最后给一段100字左右的总体小结。\n输出格式为 JSON：{"done":["..."],"progress":["..."],"issue":["..."],"comm":["..."],"summary":"..."}';
+  const base=String(cfg.baseUrl||'').replace(/\/+$/, '');
+  const url=base+'/chat/completions';
+  const ctl=new AbortController();
+  const timer=setTimeout(()=>ctl.abort(), Number(cfg.timeout)||15000);
+  try{
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
+      body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:text}], temperature:0.6, stream:false}),
+      signal:ctl.signal
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    // 尝试提取 JSON
+    let jsonStr=content;
+    const m=content.match(/\{[\s\S]*\}/);
+    if(m) jsonStr=m[0];
+    const parsed=JSON.parse(jsonStr);
+    const kpis=[{l:'完成事项',v:(parsed.done||[]).length+'项'},{l:'今日工作量',v:(parsed.done||[]).length+(parsed.progress||[]).length+(parsed.issue||[]).length+(parsed.comm||[]).length+'条'},{l:'成果完成率',v:'AI生成'}];
+    return {kpis, done:parsed.done||[], progress:parsed.progress||[], issue:parsed.issue||[], comm:parsed.comm||[], summary:parsed.summary||'', raw:[]};
+  }catch(e){ throw e; }
+  finally{ clearTimeout(timer); }
+}
 /* 一键生成今日总结（先自动录入草稿，再调用 AI 总结） */
-function generateTodaySummary(){
+async function generateTodaySummary(){
   const ds=todayStr();
   const draft=$('#logInput').value.trim();
   if(draft){ addLogEntry(draft, 'manual'); $('#logInput').value=''; }
   const arr=getEntries(ds);
   if(!arr.length){ toast('请先录入今天的条目','warn'); return; }
   const text=concatEntries(ds);
-  const res=aiSummarize(text);
-  State.aiSummaries[ds]=res;
-  save();
-  renderAiSummary(ds);
-  renderLogHistory();
-  toast('已生成今日 AI 总结 ✓');
+  const out=$('#reportOut');
+  out.innerHTML='<div class="placeholder">AI 正在总结中…</div>';
+  try{
+    const res=await computeSummary(text);
+    State.aiSummaries[ds]=res;
+    save();
+    renderAiSummary(ds);
+    renderLogHistory();
+    toast('已生成今日 AI 总结 ✓');
+  }catch(e){
+    toast('总结生成失败，请重试','err');
+    renderAiSummary(ds);
+  }
 }
 function periodReport(){
   const period=$('#reportPeriod').value;
@@ -1048,10 +1096,15 @@ function divergeScene(t,light,place){
   ];
   return {kind:'scene',topic:'场景补全 · '+ (light||'日常'),lines};
 }
+/* 取当前启用的第一个 AI 模型配置 */
+function getActiveAiModel(){
+  const arr=State.aiModels||[];
+  return arr.find(m=>m.enabled && m.baseUrl && m.key && m.model) || null;
+}
 /* 计算灵感发散：开启大模型则用真实 LLM，否则用内置启发式 */
 async function computeDiverge(text){
-  const cfg=State.aiConfig;
-  if(cfg && cfg.useLLM && cfg.baseUrl && cfg.key && cfg.model){
+  const cfg=getActiveAiModel();
+  if(cfg){
     try{
       const lines=await callLLMDiverge(text, cfg);
       if(lines && lines.length) return {kind:'llm', topic:'AI 发散', lines};
@@ -1348,40 +1401,99 @@ function initTheme(){
   };
   applyTheme(State.theme);
 }
-/* 设置面板：AI 大模型配置（灵感发散用真实 LLM） */
+/* 设置面板：AI 大模型多模型管理 + GitHub 更新 */
 function initSettings(){
   const ui=id=>$(id);
-  const sync=()=>{
-    State.aiConfig={
-      baseUrl:(ui('#aiBaseUrl').value||'').trim(),
-      key:(ui('#aiKey').value||'').trim(),
-      model:(ui('#aiModel').value||'').trim(),
-      useLLM:State.aiConfig.useLLM,
-      timeout:Number(State.aiConfig.timeout)||15000,
+  State.aiModels=State.aiModels||[];
+  /* --- AI 模型列表渲染 --- */
+  function renderAiModels(){
+    const wrap=ui('#aiModelList'); if(!wrap) return; wrap.innerHTML='';
+    const arr=State.aiModels;
+    if(!arr.length){
+      wrap.innerHTML='<div class="ai-empty">暂无模型，点击下方「添加模型」开始配置</div>';
+      return;
+    }
+    arr.forEach((m,idx)=>{
+      const el=document.createElement('div'); el.className='ai-model-card';
+      el.innerHTML=`
+        <div class="ai-model-head">
+          <div class="ai-model-meta">
+            <b>${esc(m.name||'未命名')}</b>
+            <span>${esc(m.model||'—')}</span>
+          </div>
+          <label class="switch nc-switch ${m.enabled?'on':''}"><input type="checkbox" ${m.enabled?'checked':''}><i></i></label>
+        </div>
+        <div class="ai-model-url">${esc(m.baseUrl||'—')}</div>
+        <div class="ai-model-actions">
+          <button class="btn mini ghost" data-edit="${idx}">编辑</button>
+          <button class="btn mini ghost" data-del="${idx}">删除</button>
+        </div>`;
+      el.querySelector('input').onchange=e=>{ m.enabled=e.target.checked; el.querySelector('.nc-switch').classList.toggle('on', m.enabled); save(); };
+      el.querySelector('[data-edit]').onclick=()=>openAiEdit(idx);
+      el.querySelector('[data-del]').onclick=()=>{
+        if(!confirm('确定删除模型「'+(m.name||'未命名')+'」？')) return;
+        State.aiModels.splice(idx,1); save(); renderAiModels();
+      };
+      wrap.appendChild(el);
+    });
+  }
+  /* --- 编辑/添加模型弹窗 --- */
+  function openAiEdit(idx){
+    const isAdd=idx===-1;
+    const m=isAdd?{id:uid(),name:'',baseUrl:'',key:'',model:'',enabled:true,timeout:15000}:State.aiModels[idx];
+    ui('#aiEditModalTitle').textContent=isAdd?'添加模型':'编辑模型';
+    ui('#aiEditName').value=m.name||'';
+    ui('#aiEditBaseUrl').value=m.baseUrl||'';
+    ui('#aiEditKey').value=m.key||'';
+    ui('#aiEditModel').value=m.model||'';
+    ui('#aiEditEnabled').classList.toggle('on', !!m.enabled);
+    ui('#aiEditModal').classList.remove('hidden');
+    ui('#aiEditSave').onclick=()=>{
+      const nm={
+        id:m.id, name:(ui('#aiEditName').value||'').trim()||'未命名模型',
+        baseUrl:(ui('#aiEditBaseUrl').value||'').trim(),
+        key:(ui('#aiEditKey').value||'').trim(),
+        model:(ui('#aiEditModel').value||'').trim(),
+        enabled:ui('#aiEditEnabled').classList.contains('on'),
+        timeout:15000,
+      };
+      if(isAdd) State.aiModels.push(nm); else State.aiModels[idx]=nm;
+      save(); renderAiModels(); ui('#aiEditModal').classList.add('hidden');
+      toast(isAdd?'模型已添加':'模型已保存');
     };
-    save();
-  };
-  ui('#aiBaseUrl').value=State.aiConfig.baseUrl||'';
-  ui('#aiKey').value=State.aiConfig.key||'';
-  ui('#aiModel').value=State.aiConfig.model||'';
-  ui('#aiUseSwitch').classList.toggle('on', !!State.aiConfig.useLLM);
-  ['#aiBaseUrl','#aiKey','#aiModel'].forEach(s=>ui(s).addEventListener('input', sync));
-  ui('#aiUseSwitch').onclick=()=>{
-    State.aiConfig.useLLM=!State.aiConfig.useLLM;
-    ui('#aiUseSwitch').classList.toggle('on', State.aiConfig.useLLM);
-    save();
-    toast(State.aiConfig.useLLM?'已开启大模型发散':'已用内置启发式');
-  };
-  ui('#aiTestBtn').onclick=async()=>{
-    const c=State.aiConfig;
+    ui('#aiEditCancel').onclick=()=>ui('#aiEditModal').classList.add('hidden');
+    ui('#aiEditModalClose').onclick=()=>ui('#aiEditModal').classList.add('hidden');
+  }
+  ui('#aiEditEnabled').onclick=()=>ui('#aiEditEnabled').classList.toggle('on');
+  ui('#aiAddBtn').onclick=()=>openAiEdit(-1);
+  ui('#aiEditTest').onclick=async()=>{
+    const c={
+      baseUrl:(ui('#aiEditBaseUrl').value||'').trim(),
+      key:(ui('#aiEditKey').value||'').trim(),
+      model:(ui('#aiEditModel').value||'').trim(),
+      timeout:15000,
+    };
     if(!c.baseUrl||!c.key||!c.model){ toast('请先填好接口地址、Key 和模型名','warn'); return; }
-    const btn=ui('#aiTestBtn'); btn.textContent='测试中…'; btn.disabled=true;
+    const btn=ui('#aiEditTest'); btn.textContent='测试中…'; btn.disabled=true;
     try{
       const lines=await callLLMDiverge('用一句话说说什么是专注', c);
       if(lines && lines.length) toast('连接成功，大模型可用 ✓');
       else toast('连接成功但未返回内容，请检查模型名','warn');
     }catch(e){ toast('连接失败：'+(e&&e.message||e),'err'); }
     finally{ btn.textContent='测试连接'; btn.disabled=false; }
+  };
+  renderAiModels();
+  /* --- GitHub 更新入口 --- */
+  ui('#githubRepo').value=State.githubRepo||'';
+  ui('#githubRepo').addEventListener('input',()=>{
+    State.githubRepo=(ui('#githubRepo').value||'').trim(); save();
+  });
+  ui('#goUpdateBtn').onclick=()=>{
+    const repo=State.githubRepo;
+    if(!repo){ toast('请先填写 GitHub 仓库地址','warn'); return; }
+    let url=repo;
+    if(!/^https?:\/\//i.test(url)) url='https://'+url;
+    window.open(url+'/releases/latest','_blank','noopener,noreferrer');
   };
 }
 
@@ -1417,7 +1529,7 @@ function save(){
   Store.write({
     tasks:State.tasks, log:State.log, aiSummaries:State.aiSummaries,
     ideas:State.ideas, ideaAi:State.ideaAi, theme:State.theme,
-    newsCats:State.newsCats, aiConfig:State.aiConfig,
+    newsCats:State.newsCats, aiModels:State.aiModels, githubRepo:State.githubRepo,
   });
 }
 function load(){
@@ -1439,15 +1551,25 @@ function load(){
   if(d.aiSummaries) State.aiSummaries=d.aiSummaries;
   if(Array.isArray(d.ideas)) State.ideas=d.ideas;
   if(typeof d.ideaAi==='boolean') State.ideaAi=d.ideaAi;
-  if(d.aiConfig && typeof d.aiConfig==='object'){
-    State.aiConfig={
+  /* AI 模型：新格式 aiModels 数组，旧版 aiConfig 对象迁移为数组首项 */
+  if(Array.isArray(d.aiModels) && d.aiModels.length){
+    State.aiModels=d.aiModels.map(m=>({
+      id:m.id||uid(), name:String(m.name||'').trim()||'未命名模型',
+      baseUrl:String(m.baseUrl||'').trim(), key:String(m.key||'').trim(),
+      model:String(m.model||'').trim(), enabled:!!m.enabled,
+      timeout:Number(m.timeout)||15000,
+    }));
+  }else if(d.aiConfig && typeof d.aiConfig==='object' && (d.aiConfig.baseUrl||d.aiConfig.model)){
+    State.aiModels=[{
+      id:uid(), name:'默认模型',
       baseUrl:String(d.aiConfig.baseUrl||'').trim(),
       key:String(d.aiConfig.key||'').trim(),
       model:String(d.aiConfig.model||'').trim(),
-      useLLM:!!d.aiConfig.useLLM,
+      enabled:!!d.aiConfig.useLLM,
       timeout:Number(d.aiConfig.timeout)||15000,
-    };
-  }
+    }];
+  }else State.aiModels=State.aiModels||[];
+  if(typeof d.githubRepo==='string') State.githubRepo=d.githubRepo;
   if(['warm','cold','night'].includes(d.theme)) State.theme=d.theme;
 }
 /* 首次使用：不预置任何示例任务/日志/灵感，保持干净 */

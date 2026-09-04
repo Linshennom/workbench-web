@@ -71,15 +71,16 @@
     </div>
     <div class="panel-divider"></div>
     <div class="theme-info">
-      <h4>AI 大模型（灵感发散）</h4>
-      <label class="field ai-field"><span>接口地址</span><input id="aiBaseUrl" placeholder="https://api.openai.com/v1" inputmode="url"></label>
-      <label class="field ai-field"><span>API Key</span><input id="aiKey" type="password" placeholder="sk-…" autocomplete="off"></label>
-      <label class="field ai-field"><span>模型名称</span><input id="aiModel" placeholder="gpt-4o-mini"></label>
-      <div class="ai-row">
-        <label class="switch-line"><span class="switch" id="aiUseSwitch"><i></i></span><span class="switch-label">用大模型生成 AI 发散</span></label>
-        <button class="btn mini ghost" id="aiTestBtn">测试连接</button>
-      </div>
-      <p class="ai-note">开启后，灵感发散将调用你填写的大模型（OpenAI 兼容接口）替代内置启发式。需服务端开启 CORS（如本地 Ollama、兼容 OpenAI 的网关）；调用失败会自动回退到内置方案。</p>
+      <h4>AI 大模型（灵感发散 & 工作总结）</h4>
+      <div id="aiModelList"></div>
+      <button class="btn ghost full" id="aiAddBtn" style="margin-top:8px">＋ 添加模型</button>
+      <p class="ai-note">添加多个 OpenAI 兼容接口的大模型；启用后，灵感发散与工作总结会优先调用大模型生成，失败自动回退到内置方案。</p>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="theme-info">
+      <h4>更新到最新版</h4>
+      <label class="field ai-field"><span>GitHub 仓库地址</span><input id="githubRepo" placeholder="github.com/username/repo" inputmode="url"></label>
+      <button class="btn primary full" id="goUpdateBtn">前往 releases 查看最新版 ↗</button>
     </div>
     <div class="panel-divider"></div>
     <div class="theme-info">
@@ -350,6 +351,42 @@
     <div class="modal-foot">
       <button class="btn ghost" id="newsCatReset">恢复默认</button>
       <button class="btn primary" id="newsCatDone">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：AI 模型编辑 ============ -->
+<div class="modal-mask hidden" id="aiEditModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="aiEditModalTitle">添加模型</h3>
+      <button class="modal-x" id="aiEditModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>模型名称</span>
+        <input id="aiEditName" placeholder="例如：OpenAI 官方" maxlength="30">
+      </label>
+      <label class="field">
+        <span>接口地址</span>
+        <input id="aiEditBaseUrl" placeholder="https://api.openai.com/v1" inputmode="url">
+      </label>
+      <label class="field">
+        <span>API Key</span>
+        <input id="aiEditKey" type="password" placeholder="sk-…" autocomplete="off">
+      </label>
+      <label class="field">
+        <span>模型名称</span>
+        <input id="aiEditModel" placeholder="gpt-4o-mini">
+      </label>
+      <div class="ai-row">
+        <label class="switch-line"><span class="switch" id="aiEditEnabled"><i></i></span><span class="switch-label">启用此模型</span></label>
+        <button class="btn mini ghost" id="aiEditTest">测试连接</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="aiEditCancel">取消</button>
+      <button class="btn primary" id="aiEditSave">保存</button>
     </div>
   </div>
 </div>
