@@ -525,7 +525,8 @@ function toAiNewsItems(arr, cfgCat){
    循环直到 finish_reason 不再是 tool_calls。 */
 async function kimiChatFetch(url, cfg, messages, maxRounds){
   const headers={'Content-Type':'application/json','Authorization':'Bearer '+cfg.key};
-  const baseBody={model:cfg.model, temperature:0.4, stream:false};
+  /* Kimi 仅允许 temperature=1：这里不传该参数（服务端按默认 1 走），否则会 400 invalid temperature */
+  const baseBody={model:cfg.model, stream:false};
   let msgs=messages.slice();
   for(let round=0; round<maxRounds; round++){
     const ctl=new AbortController();
@@ -1179,10 +1180,12 @@ async function callLLMSummarize(text, cfg){
   const ctl=new AbortController();
   const timer=setTimeout(()=>ctl.abort(), Number(cfg.timeout)||15000);
   try{
+    const body={model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:text}], stream:false};
+    if(!isKimiModel(cfg)) body.temperature=0.6;
     const r=await fetch(url,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
-      body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:text}], temperature:0.6, stream:false}),
+      body:JSON.stringify(body),
       signal:ctl.signal
     });
     if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
@@ -1395,10 +1398,12 @@ async function callLLMDiverge(text, cfg){
   const ctl=new AbortController();
   const timer=setTimeout(()=>ctl.abort(), Number(cfg.timeout)||15000);
   try{
+    const body={model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:user}], stream:false};
+    if(!isKimiModel(cfg)) body.temperature=0.8;
     const r=await fetch(url,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
-      body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:user}], temperature:0.8, stream:false}),
+      body:JSON.stringify(body),
       signal:ctl.signal
     });
     if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
@@ -1438,6 +1443,7 @@ function explainAiErr(e){
   const s=(e&&e.status)||0;
   const m=String((e&&e.message)||'').toLowerCase();
   if(s===401||m.includes('invalid authentication')||m.includes('unauthorized')||m.includes('api key')) return 'Key 无效：请到 platform.moonshot.cn（或其他平台）检查/重新创建 API Key，注意 sk- 开头、勿有多余空格或换行';
+  if(m.includes('invalid temperature')||m.includes('only 1 is allowed')) return 'Kimi 只允许 temperature=1：已自动不传该参数，若仍出现请刷新页面后重试';
   if(s===404||m.includes('url.not_found')||m.includes('not found')) return '接口地址不对：Kimi 应为 https://api.moonshot.cn/v1（结尾要带 /v1）；若你填了别的地址请核对';
   if(s===400||m.includes('invalid')&&!m.includes('authentication')) return '参数有误，多半是模型名不对：Kimi 模型名请填 kimi-k2.6 或 kimi-k3（k3 更贵）';
   if(m.includes('insufficient')||m.includes('balance')||m.includes('quota')) return '余额/额度不足：Kimi 需充值或体验金不足，去 platform.moonshot.cn 查看';
