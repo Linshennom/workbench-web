@@ -366,19 +366,20 @@
     <div class="modal-body">
       <label class="field">
         <span>模型名称</span>
-        <input id="aiEditName" placeholder="例如：OpenAI 官方" maxlength="30">
+        <input id="aiEditName" placeholder="例如：Kimi（推荐联网）" maxlength="30">
       </label>
+      <button class="btn mini ghost" id="aiKimiPreset" type="button" style="margin:2px 0 10px">＋ 一键填入 Kimi 预设</button>
       <label class="field">
         <span>接口地址</span>
-        <input id="aiEditBaseUrl" placeholder="https://api.openai.com/v1" inputmode="url">
+        <input id="aiEditBaseUrl" placeholder="https://api.moonshot.cn/v1" inputmode="url">
       </label>
       <label class="field">
         <span>API Key</span>
-        <input id="aiEditKey" type="password" placeholder="sk-…" autocomplete="off">
+        <input id="aiEditKey" type="password" placeholder="sk-…（platform.moonshot.cn 创建）" autocomplete="off">
       </label>
       <label class="field">
-        <span>模型名称</span>
-        <input id="aiEditModel" placeholder="gpt-4o-mini">
+        <span>模型名</span>
+        <input id="aiEditModel" placeholder="kimi-k2.6（可联网，性价比高）">
       </label>
       <div class="ai-row">
         <label class="switch-line"><span class="switch" id="aiEditEnabled"><i></i></span><span class="switch-label">启用此模型</span></label>

@@ -479,6 +479,28 @@ function isKimiModel(cfg){
   const b=String((cfg&&cfg.baseUrl)||'').toLowerCase();
   return b.includes('moonshot');
 }
+/* 规整 baseUrl：去掉结尾斜杠；若填的是常见的域名根（漏了 /v1），自动补上。
+   例：https://api.moonshot.cn  →  https://api.moonshot.cn/v1 */
+function normBaseUrl(baseUrl){
+  let b=String(baseUrl||'').trim().replace(/\/+$/,'');
+  if(!b) return '';
+  if(!/\/v\d+$/i.test(b) && (isKimiModel({baseUrl:b}) || /api\.(deepseek|openai)\.com$/i.test(b))){
+    b+='/v1';
+  }
+  return b;
+}
+/* 从非 2xx 响应里尽量提取服务端真实错误消息，拼进抛出的 Error */
+async function throwRespError(r, fallback){
+  let msg=fallback||('HTTP '+r.status);
+  try{
+    const j=await r.json();
+    const em=(j&&j.error&&(j.error.message||j.error)) || (j&&j.message) || (j&&j.error);
+    if(em) msg=String(em).slice(0,120);
+  }catch(e){ /* 忽略，保留 fallback */ }
+  const err=new Error(msg);
+  err.status=r.status;
+  throw err;
+}
 /* 解析大模型返回文本里的 JSON 数组（兼容被文字/代码块包裹的情况） */
 function extractJsonArray(content){
   if(!content) return [];
@@ -513,7 +535,7 @@ async function kimiChatFetch(url, cfg, messages, maxRounds){
         body:JSON.stringify(Object.assign({},baseBody,{messages:msgs,
           tools:[{type:'builtin_function',function:{name:'$web_search'}}]})),
         signal:ctl.signal});
-      if(!r.ok) throw new Error('HTTP '+r.status);
+      if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
       const j=await r.json();
       const choice=j && j.choices && j.choices[0];
       const msg=choice && choice.message;
@@ -534,7 +556,7 @@ async function kimiChatFetch(url, cfg, messages, maxRounds){
 /* 调用大模型实时检索某一分类的最新资讯，要求返回紧凑 JSON 数组。
    Kimi/Moonshot 模型原生联网（$web_search）；其余模型保持原逻辑（能力所限多基于模型知识）。 */
 async function callLLMSearchNews(cfgCat, cfg, seeds){
-  const base=String(cfg.baseUrl||'').replace(/\/+$/,'');
+  const base=normBaseUrl(cfg.baseUrl);
   const url=base+'/chat/completions';
   const sys='你是一个实时新闻聚合助手。请针对用户指定的资讯分类，联网检索并汇总当前（最近数小时内）真正新鲜的热点资讯。只输出有效的最新条目，避免过时或重复内容。必须严格输出 JSON 数组，格式：[{"t":"标题","d":"一句话摘要","tag":"简短领域标签","url":"来源链接(可空)"}]，6-10 条，按新鲜度/热度排序。不要输出 JSON 以外的任何文字。';
   const catDesc=`分类：${cfgCat.name}（来源平台：${cfgCat.label||''}）。当前榜单上的种子话题：${(seeds||[]).join('、')}。请基于这些方向检索更新鲜的条目；若你无法真实联网，则基于你的最新知识给出你认为此刻应关注的热点（请在摘要里克制、勿编造具体到分钟的细节）。`;
@@ -553,7 +575,7 @@ async function callLLMSearchNews(cfgCat, cfg, seeds){
         body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:catDesc}], temperature:0.5, stream:false}),
         signal:ctl.signal
       });
-      if(!r.ok) throw new Error('HTTP '+r.status);
+      if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
       const j=await r.json();
       content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
     }finally{ clearTimeout(timer); }
@@ -1152,7 +1174,7 @@ async function computeSummary(text){
 /* 调用 OpenAI 兼容大模型做工作总结 */
 async function callLLMSummarize(text, cfg){
   const sys='你是一位资深职场日报助手。请根据用户提供的今日工作条目，生成结构化的工作日报，必须包含以下四个部分（不要出现明日计划）：\n一、今日完成：列出已完成的事项，每条带【话题标签】。\n二、进行中/推进：列出正在推进的工作。\n三、问题与待办：列出遇到的问题和待跟进事项。\n四、沟通与协作：列出会议、沟通、协作类事项。\n最后给一段100字左右的总体小结。\n输出格式为 JSON：{"done":["..."],"progress":["..."],"issue":["..."],"comm":["..."],"summary":"..."}';
-  const base=String(cfg.baseUrl||'').replace(/\/+$/, '');
+  const base=normBaseUrl(cfg.baseUrl);
   const url=base+'/chat/completions';
   const ctl=new AbortController();
   const timer=setTimeout(()=>ctl.abort(), Number(cfg.timeout)||15000);
@@ -1163,7 +1185,7 @@ async function callLLMSummarize(text, cfg){
       body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:text}], temperature:0.6, stream:false}),
       signal:ctl.signal
     });
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
     const j=await r.json();
     const content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
     // 尝试提取 JSON
@@ -1368,7 +1390,7 @@ async function computeDiverge(text){
 async function callLLMDiverge(text, cfg){
   const sys='你是一个灵感发散助手。针对用户给出的一句灵感、场景或想法，输出 4-6 条有启发、可探索的发散角度，每条一行，直接给要点，不要解释，不要编号外的多余文字。';
   const user='灵感：「'+text+'」\n请发散出几个值得探索的角度：';
-  const base=String(cfg.baseUrl||'').replace(/\/+$/,'');
+  const base=normBaseUrl(cfg.baseUrl);
   const url=base+'/chat/completions';
   const ctl=new AbortController();
   const timer=setTimeout(()=>ctl.abort(), Number(cfg.timeout)||15000);
@@ -1379,11 +1401,50 @@ async function callLLMDiverge(text, cfg){
       body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:user}], temperature:0.8, stream:false}),
       signal:ctl.signal
     });
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
     const j=await r.json();
     const content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
     return content.split(/\n+/).map(s=>s.replace(/^\s*[-*•0-9．.、]\s*/,'').trim()).filter(Boolean).slice(0,8);
   }finally{ clearTimeout(timer); }
+}
+/* 连接测试：Kimi/Moonshot 用一个最小 $web_search 请求校验「接口+Key+模型+联网」全链路；
+   其余模型用普通 chat 校验。抛出的错误带服务端真实消息与 status。 */
+async function testConnection(c){
+  const base=normBaseUrl(c.baseUrl);
+  if(!base) throw new Error('接口地址为空');
+  const url=base+'/chat/completions';
+  const usr=isKimiModel(c)
+    ? '用一句话说：现在是几点钟，请只回答你能确定的内容。'
+    : '用一句话说说什么是专注';
+  if(isKimiModel(c)){
+    await kimiChatFetch(url, c,
+      [{role:'user', content:usr}], 2);
+  }else{
+    const ctl=new AbortController();
+    const timer=setTimeout(()=>ctl.abort(), Number(c.timeout)||15000);
+    try{
+      const r=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
+        body:JSON.stringify({model:c.model, messages:[{role:'user',content:usr}], stream:false}),
+        signal:ctl.signal
+      });
+      if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
+    }finally{ clearTimeout(timer); }
+  }
+}
+/* 把连接错误翻译成对用户可操作的排查建议 */
+function explainAiErr(e){
+  const s=(e&&e.status)||0;
+  const m=String((e&&e.message)||'').toLowerCase();
+  if(s===401||m.includes('invalid authentication')||m.includes('unauthorized')||m.includes('api key')) return 'Key 无效：请到 platform.moonshot.cn（或其他平台）检查/重新创建 API Key，注意 sk- 开头、勿有多余空格或换行';
+  if(s===404||m.includes('url.not_found')||m.includes('not found')) return '接口地址不对：Kimi 应为 https://api.moonshot.cn/v1（结尾要带 /v1）；若你填了别的地址请核对';
+  if(s===400||m.includes('invalid')&&!m.includes('authentication')) return '参数有误，多半是模型名不对：Kimi 模型名请填 kimi-k2.6 或 kimi-k3（k3 更贵）';
+  if(m.includes('insufficient')||m.includes('balance')||m.includes('quota')) return '余额/额度不足：Kimi 需充值或体验金不足，去 platform.moonshot.cn 查看';
+  if(m.includes('model_not_found')||m.includes('does not exist')) return '模型名不存在，请核对（Kimi：kimi-k2.6 / kimi-k3）';
+  if(s===429||m.includes('rate limit')) return '请求过于频繁被限流，稍等几秒再试';
+  if(!s&&(m.includes('failed to fetch')||m.includes('network')||m.includes('abort')||m.includes('timeout'))) return '无法连接服务器：请检查网络；若用 api.moonshot.ai（海外端点）国内常不通，请改用 api.moonshot.cn';
+  return null;
 }
 async function addIdea(text,src='text',doDiverge=true){
   const idea={id:uid(),text,date:new Date().toLocaleString('zh-CN',{hour12:false}),src,diverge:null};
@@ -1708,10 +1769,20 @@ function initSettings(){
     ui('#aiEditModel').value=m.model||'';
     ui('#aiEditEnabled').classList.toggle('on', !!m.enabled);
     ui('#aiEditModal').classList.remove('hidden');
+    const kp=ui('#aiKimiPreset');
+    if(kp){
+      kp.onclick=()=>{
+        ui('#aiEditName').value='Kimi（推荐联网）';
+        ui('#aiEditBaseUrl').value='https://api.moonshot.cn/v1';
+        ui('#aiEditModel').value='kimi-k2.6';
+        ui('#aiEditEnabled').classList.add('on');
+        toast('已填入 Kimi 预设，只差粘贴 API Key');
+      };
+    }
     ui('#aiEditSave').onclick=()=>{
       const nm={
         id:m.id, name:(ui('#aiEditName').value||'').trim()||'未命名模型',
-        baseUrl:(ui('#aiEditBaseUrl').value||'').trim(),
+        baseUrl:normBaseUrl(ui('#aiEditBaseUrl').value),
         key:(ui('#aiEditKey').value||'').trim(),
         model:(ui('#aiEditModel').value||'').trim(),
         enabled:ui('#aiEditEnabled').classList.contains('on'),
@@ -1736,10 +1807,14 @@ function initSettings(){
     if(!c.baseUrl||!c.key||!c.model){ toast('请先填好接口地址、Key 和模型名','warn'); return; }
     const btn=ui('#aiEditTest'); btn.textContent='测试中…'; btn.disabled=true;
     try{
-      const lines=await callLLMDiverge('用一句话说说什么是专注', c);
-      if(lines && lines.length) toast('连接成功，大模型可用 ✓');
-      else toast('连接成功但未返回内容，请检查模型名','warn');
-    }catch(e){ toast('连接失败：'+(e&&e.message||e),'err'); }
+      await testConnection(c);
+      toast('连接成功，大模型可用 ✓');
+    }catch(e){
+      const hint=explainAiErr(e);
+      console.warn('AI 连接测试失败：', e&&e.message, 'status', e&&e.status);
+      const shown=(e&&e.message)||'未知错误';
+      toast('连接失败：'+shown+(hint?'（'+hint+'）':''),'err');
+    }
     finally{ btn.textContent='测试连接'; btn.disabled=false; }
   };
   renderAiModels();
