@@ -1004,26 +1004,41 @@ function renderTaskArea(){
 function renderLogDate(){ $('#logDate').textContent = todayStr(); }
 function renderLogHistory(){
   const wrap=$('#logHistory'); wrap.innerHTML='';
-  const dates=Object.keys(State.log).filter(d=>getEntries(d).length).sort().reverse();
+  // 历史 = 有条目标 或 有总结(含已确认归档、条目已清空) 的日期
+  const dateSet=new Set();
+  Object.keys(State.log).forEach(d=>{ if(getEntries(d).length) dateSet.add(d); });
+  Object.keys(State.aiSummaries).forEach(d=>{ if(State.aiSummaries[d]) dateSet.add(d); });
+  const dates=[...dateSet].sort().reverse();
   $('#logClearAllBtn').style.display = dates.length? 'inline-flex':'none';
   if(!dates.length){ wrap.innerHTML='<div style="color:var(--ink-3);font-size:12px;padding:6px 4px">还没有历史日志，记录第一天的内容吧</div>'; return; }
   dates.forEach(ds=>{
     const arr=getEntries(ds);
-    const item=document.createElement('div'); item.className='log-item';
     const hasSum=State.aiSummaries[ds];
-    const concat=arr.map(e=>e.text).join('。').slice(0,80);
+    const confirmed=hasSum && hasSum.confirmed;
+    const isToday=ds===todayStr();
     const count=arr.length;
+    // 预览：有总结用总结小结，否则用条目拼段
+    let preview;
+    if(hasSum && hasSum.summary){ preview=hasSum.summary; }
+    else preview=arr.map(e=>e.text).join('。');
+    preview=(preview||'').slice(0,80);
+    const badge = confirmed?'<span class="sum-badge" style="background:var(--ok-bg,#e6f6ea);color:#2f9e44">✓ 已归档</span>'
+      : (hasSum && isToday)?'<span class="sum-badge" style="background:#fff3d6;color:#c77a00">待确认</span>'
+      : (hasSum)?'<span class="sum-badge">AI 总结</span>'
+      : `<span class="sum-badge">${count} 条</span>`;
+    const item=document.createElement('div'); item.className='log-item';
     item.innerHTML=`<div class="log-item-top">
-        <div class="log-item-date"><span>${ds}</span><span class="sum-badge">${count} 条</span>${hasSum?'<span class="sum-badge">✓ AI已归纳</span>':''}</div>
+        <div class="log-item-date"><span>${ds}</span>${badge}${(count&&!confirmed)?`<span class="sum-badge">${count} 条</span>`:''}</div>
         <button class="log-del" data-ds="${esc(ds)}" title="删除这一天">🗑</button>
       </div>
-      <div class="log-item-text">${esc(concat)}${concat.length>=80?'…':''}</div>
-      ${hasSum?'<div class="log-item-sum">查看该日 AI 总结 →</div>':''}`;
+      <div class="log-item-text">${esc(preview)}${preview.length>=80?'…':''}</div>
+      ${hasSum?'<div class="log-item-sum">点击查看/修改该日总结 →</div>':'<div class="log-item-sum">点「生成今日总结」做 AI 归纳</div>'}`;
     item.style.cursor='pointer';
     item.addEventListener('click',e=>{
       if(e.target.classList.contains('log-del')) return;
-      if(State.aiSummaries[ds]) renderAiSummary(ds);
-      else toast(ds+' 还没有生成总结，点「生成今日总结」先','warn');
+      if(hasSum) renderAiSummary(ds);
+      else if(isToday){ $('#logInput').focus(); toast(ds+' 还没有生成总结，先点「▶ 生成今日总结」','warn'); }
+      else toast(ds+' 还没有生成总结','warn');
     });
     item.querySelector('.log-del').onclick=(ev)=>{ ev.stopPropagation(); deleteOneLog(ds); };
     wrap.appendChild(item);
@@ -1032,8 +1047,12 @@ function renderLogHistory(){
 /* 单独删除某天日志 */
 function deleteOneLog(ds){
   const arr=getEntries(ds);
-  if(!arr.length) return;
-  if(!confirm('删除 '+ds+' 的全部 '+arr.length+' 条日志与AI总结？此操作不可恢复。')) return;
+  const hasSum=!!State.aiSummaries[ds];
+  if(!arr.length && !hasSum) return;
+  const what=arr.length
+    ? ('删除 '+ds+' 的 '+arr.length+' 条日志'+(hasSum?'与该日 AI 总结':'')+'？此操作不可恢复。')
+    : ('删除 '+ds+' 的 AI 总结归档？此操作不可恢复。');
+  if(!confirm(what)) return;
   State.log[ds]=[];
   delete State.aiSummaries[ds];
   if(ds===todayStr()){
@@ -1158,16 +1177,83 @@ function renderAiSummary(ds){
   const s=State.aiSummaries[ds];
   const out=$('#reportOut');
   if(!s){ out.innerHTML='<div class="placeholder">该日期暂无AI总结</div>'; return; }
-  const block=(title,items)=>{ if(!items.length) return ''; return `<div class="sum-head">${title}</div><ul>${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`; };
+  const isToday=ds===todayStr();
+  const confirmed=!!s.confirmed;
+  const draft=isToday&&!confirmed;           // 今天刚生成、未确认 → 待定稿草稿（可改/可确认）
+  const block=(title,items)=>{ if(!items||!items.length) return ''; return `<div class="sum-head">${title}</div><ul>${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`; };
+  const badge=confirmed
+    ? '<span class="sum-badge" style="background:var(--ok-bg,#e6f6ea);color:#2f9e44">✓ 已归档</span>'
+    : (isToday?'<span class="sum-badge" style="background:#fff3d6;color:#c77a00">待确认</span>':'<span class="sum-badge">AI 总结</span>');
   out.innerHTML=`
-    <div style="font-size:11px;color:var(--ink-3);margin-bottom:5px;font-family:var(--mono)">AI 工作日报 · ${ds}</div>
-    <div class="sum-kpi">${s.kpis.map(k=>`<div class="kpi"><b>${k.v}</b><span>${k.l}</span></div>`).join('')}</div>
-    ${block('一、今日完成',s.done)}
-    ${block('二、进行中 / 推进',s.progress)}
-    ${block('三、问题与待办',s.issue)}
-    ${block('四、沟通与协作',s.comm)}
-    <div class="sum-head">总体小结</div>
-    <div class="sum-text">${esc(s.summary)}</div>`;
+    <div class="ai-summary">
+      <div class="sum-meta"><span style="font-family:var(--mono)">AI 工作日报 · ${ds}</span>${badge}</div>
+      <div class="sum-kpi">${(s.kpis||[]).map(k=>`<div class="kpi"><b>${esc(k.v)}</b><span>${esc(k.l)}</span></div>`).join('')}</div>
+      ${block('一、今日完成',s.done)}
+      ${block('二、进行中 / 推进',s.progress)}
+      ${block('三、问题与待办',s.issue)}
+      ${block('四、沟通与协作',s.comm)}
+      <div class="sum-head">总体小结</div>
+      <div class="sum-text">${esc(s.summary||'')}</div>
+    </div>
+    <div class="sum-actions">
+      <button class="btn mini ghost" data-sum-edit>✎ 修改</button>
+      ${draft?'<button class="btn mini primary" data-sum-confirm>✓ 确认并归档</button>':''}
+    </div>`;
+  const bEdit=out.querySelector('[data-sum-edit]');
+  if(bEdit) bEdit.onclick=()=>renderAiSummaryEdit(ds);
+  const bConf=out.querySelector('[data-sum-confirm]');
+  if(bConf) bConf.onclick=()=>confirmTodaySummary(ds);
+}
+/* 编辑态：把总结的四个分组 + 小结渲染为可编辑文本域，保存后写回 */
+function renderAiSummaryEdit(ds){
+  const s=State.aiSummaries[ds];
+  const out=$('#reportOut');
+  if(!s){ out.innerHTML='<div class="placeholder">该日期暂无AI总结</div>'; return; }
+  const ta=(id,label,val)=>
+    `<label class="sum-edit-field"><span>${label}</span>
+       <textarea id="${id}" rows="${Math.max(2,Math.min(5,(val||[]).length+1))}">${esc((val||[]).join('\n'))}</textarea>
+     </label>`;
+  out.innerHTML=`
+    <div class="ai-summary">
+      <div class="sum-meta"><span style="font-family:var(--mono)">编辑日报 · ${ds}</span></div>
+      ${ta('se_done','一、今日完成（每行一条）',s.done)}
+      ${ta('se_progress','二、进行中 / 推进',s.progress)}
+      ${ta('se_issue','三、问题与待办',s.issue)}
+      ${ta('se_comm','四、沟通与协作',s.comm)}
+      <label class="sum-edit-field"><span>总体小结</span>
+        <textarea id="se_summary" rows="3">${esc(s.summary||'')}</textarea>
+      </label>
+    </div>
+    <div class="sum-actions">
+      <button class="btn mini ghost" data-sum-cancel>取消</button>
+      <button class="btn mini primary" data-sum-save>保存修改</button>
+    </div>`;
+  out.querySelector('[data-sum-cancel]').onclick=()=>renderAiSummary(ds);
+  out.querySelector('[data-sum-save]').onclick=()=>{
+    const toArr=id=>$('#'+id).value.split('\n').map(x=>x.trim()).filter(Boolean);
+    s.done=toArr('se_done'); s.progress=toArr('se_progress');
+    s.issue=toArr('se_issue'); s.comm=toArr('se_comm');
+    s.summary=$('#se_summary').value.trim();
+    save(); renderAiSummary(ds); renderLogHistory();
+    toast('总结已修改 ✓');
+  };
+}
+/* 确认定稿（仅当天草稿态）：清空今日条目标，标记已归档 */
+function confirmTodaySummary(ds){
+  const s=State.aiSummaries[ds]; if(!s) return;
+  const today=todayStr();
+  if(ds===today){
+    const arr=getEntries(ds);
+    if(arr.length && !confirm('确认定稿后将清空今日日志条目（信息已浓缩进本次总结），并把该日总结归档到历史日志。确定继续？')) return;
+    State.log[ds]=[];
+    renderTodayEntries();
+  }
+  s.confirmed=true;
+  s.confirmedAt=new Date().toLocaleString('zh-CN',{hour12:false});
+  save();
+  renderAiSummary(ds);
+  renderLogHistory();
+  toast('已确认定稿，今日条目已归档 ✓');
 }
 /* 取得某日条目数组（保证是数组） */
 function getEntries(ds){
@@ -1286,6 +1372,8 @@ async function generateTodaySummary(){
   out.innerHTML='<div class="placeholder">AI 正在总结中…</div>';
   try{
     const res=await computeSummary(text);
+    res.confirmed=false;                       // 新生成 → 待确认草稿，需用户「确认并归档」定稿
+    res.genAt=new Date().toLocaleString('zh-CN',{hour12:false});
     State.aiSummaries[ds]=res;
     save();
     renderAiSummary(ds);
@@ -1341,10 +1429,13 @@ function initReportModule(){
   /* 生成今日总结：自动收录草稿，再合并所有条目一并总结 */
   $('#logSummarizeBtn').onclick=generateTodaySummary;
   $('#reportVoiceBtn').onclick=()=>startVoice('report');
+  /* 清空草稿：仅清今日日志输入框内容，不动已录入条目与已生成总结 */
   $('#logClearBtn').onclick=()=>{
-    $('#logInput').value='';
-    $('#reportOut').innerHTML='<div class="placeholder">录入条目后，点「生成今日总结」<br>这里会生成结构化的 AI 总结。</div>';
-    toast('草稿已清空');
+    const ta=$('#logInput');
+    if(!ta.value.trim()){ toast('草稿本就是空的','warn'); return; }
+    ta.value='';
+    ta.focus();
+    toast('已清空草稿（仅输入框，条目与总结不受影响）');
   };
   /* 键盘快捷：Ctrl+Enter 在草稿中直接生成总结 */
   $('#logInput').onkeydown=(e)=>{
