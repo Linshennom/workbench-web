@@ -1,5 +1,5 @@
 /* Service Worker - offline cache for the Workbench PWA */
-const CACHE = 'workbench-v16';
+const CACHE = 'workbench-v17';
 const ASSETS = [
   './',
   './index.html',
