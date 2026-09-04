@@ -288,12 +288,13 @@ function renderNews(){
   }
   items.forEach((n,i)=>{
     const card=document.createElement('div');
-    card.className='news-card';
+    card.className='news-card'+(n.ai?' ai':'');
     card.innerHTML=`
-      <div class="news-rank">${i<9?'0'+(i+1):(i+1)}</div>
+      <div class="news-rank">${n.ai?'✦':(i<9?'0'+(i+1):(i+1))}</div>
       <div>
         <div class="news-meta">
-          ${i===0?'<span class="news-hot">热</span>':''}
+          ${n.ai?'<span class="news-tag aitag">✦ AI 实时</span>':''}
+          ${i===0&&!n.ai?'<span class="news-hot">热</span>':''}
           <span class="news-tag">${esc(n.tag||'')}</span>
           ${n.wbcat?`<span class="news-tag wbcat">微博 · ${esc(n.wbcat)}</span>`:''}
           ${n.heat?`<span class="news-heat">${esc(n.heat)}</span>`:''}
@@ -422,12 +423,104 @@ async function doNewsRefresh(from){
   getNewsCats().forEach(c=>{ if(c.id!==cur) ensureCategory(c.id); });
 }
 
+/* ============================================================
+   「AI 实时」联网搜索：用设置里启用的大模型，实时检索/汇总
+   当前分类的最新资讯。结果去重后并入列表顶部并标注来源。
+   提示：真正的新鲜度取决于你所填模型/网关是否开放联网能力；
+   若不支持，AI 会基于其知识汇总近期热点（标注为 AI 实时）。
+   ============================================================ */
+function aiNewsSeeds(catId){
+  const cfg=findCat(catId);
+  const seeds=[cfg?cfg.name:''];
+  const st=newsState[catId];
+  if(st && st.items) seeds.push(...st.items.slice(0,4).map(n=>n.t));
+  return [...new Set(seeds.filter(Boolean))].slice(0,5);
+}
+async function doAiNewsRefresh(){
+  const cfg=getActiveAiModel();
+  if(!cfg){ toast('请先在「设置 → AI 大模型」里启用并填好一个模型','warn'); return; }
+  const cur=State.newsCat;
+  const ccfg=findCat(cur);
+  const btn=$('#newsAiBtn');
+  btn.classList.add('spinning'); btn.disabled=true;
+  $('#newsSyncState').textContent='AI 正在联网检索最新'+ccfg.name+'…';
+  try{
+    const items=await callLLMSearchNews(ccfg, cfg, aiNewsSeeds(cur));
+    const fresh=mergeAiNews(cur, items);
+    if(!fresh.length){
+      $('#newsSyncState').textContent='AI 未发现较新的内容';
+      toast('AI 未发现比当前更新的内容','ok');
+      return;
+    }
+    const st=newsState[cur]||(newsState[cur]={items:[],error:null,loading:false,at:Date.now()});
+    st.items=[...fresh, ...(st.items||[]).filter(n=>!n.ai)];
+    st.aiAt=Date.now(); st.at=Date.now();
+    st.error=null; st.loading=false;
+    renderNews();
+    toast('AI 实时检索到 '+fresh.length+' 条新资讯 ✦','ok');
+  }catch(e){
+    console.warn('AI 实时搜索失败：', e&&e.message);
+    $('#newsSyncState').textContent='AI 检索失败，请重试';
+    toast('AI 检索失败：'+(e&&e.message||e),'warn');
+  }finally{
+    btn.classList.remove('spinning'); btn.disabled=false;
+    setTimeout(()=>{ if(!btn.classList.contains('spinning')) $('#newsSyncState').textContent='点击刷新加载热点'; },4000);
+  }
+}
+/* 调用大模型实时检索某一分类的最新资讯，要求返回紧凑 JSON 数组 */
+async function callLLMSearchNews(cfgCat, cfg, seeds){
+  const sys='你是一个实时新闻聚合助手。请针对用户指定的资讯分类，联网检索并汇总当前（最近数小时内）真正新鲜的热点资讯。只输出有效的最新条目，避免过时或重复内容。必须严格输出 JSON 数组，格式：[{"t":"标题","d":"一句话摘要","tag":"简短领域标签","url":"来源链接(可空)"}]，6-10 条，按新鲜度/热度排序。不要输出 JSON 以外的任何文字。';
+  const catDesc=`分类：${cfgCat.name}（来源平台：${cfgCat.label||''}）。当前榜单上的种子话题：${(seeds||[]).join('、')}。请基于这些方向检索更新鲜的条目；若你无法真实联网，则基于你的最新知识给出你认为此刻应关注的热点（请在摘要里克制、勿编造具体到分钟的细节）。`;
+  const base=String(cfg.baseUrl||'').replace(/\/+$/,'');
+  const url=base+'/chat/completions';
+  const ctl=new AbortController();
+  const timer=setTimeout(()=>ctl.abort(), 25000);
+  try{
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
+      body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:catDesc}], temperature:0.5, stream:false}),
+      signal:ctl.signal
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    const m=content.match(/\[[\s\S]*\]/);
+    const arr=JSON.parse(m?m[0]:content);
+    if(!Array.isArray(arr)) throw new Error('返回格式不正确');
+    return arr.map((x,i)=>({
+      ai:true,
+      t:String(x.t||x.title||'').trim(),
+      d:String(x.d||x.desc||'').trim(),
+      tag:String(x.tag||cfgCat.name||'AI 实时').trim(),
+      url:x.url?String(x.url):'',
+      heat:x.heat?'AI · '+String(x.heat):'',
+      src:'AI 实时',
+    })).filter(n=>n.t.length>0);
+  }finally{ clearTimeout(timer); }
+}
+/* 与当前已展示条目按标题去重，返回真正新增的条目 */
+function mergeAiNews(catId, items){
+  const st=newsState[catId];
+  const seen=new Set((st&&st.items||[]).map(n=>normKey(n.t)));
+  return (items||[]).filter(n=>{
+    const k=normKey(n.t);
+    if(!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).slice(0,12);
+}
+function normKey(s){
+  return String(s||'').replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g,'').toLowerCase().slice(0,40);
+}
+
 function initNews(){
   renderNewsTabs();
   renderNews();
   ensureCategory(State.newsCat);
   getNewsCats().forEach(c=>{ if(c.id!==State.newsCat) setTimeout(()=>ensureCategory(c.id), 500); });
   $('#newsRefreshBtn').onclick=()=>doNewsRefresh('top');
+  $('#newsAiBtn').onclick=()=>doAiNewsRefresh();
   const fab=$('#newsFab');
   fab.onclick=()=>doNewsRefresh('fab');
   /* 滚动时显示/隐藏右下角浮动刷新 */
