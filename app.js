@@ -57,7 +57,7 @@ const NEWS_MASTER = [
   {id:'baidu', name:'百度热搜', icon:'❖', src:'sixty', path:'/baidu/hot',  label:'百度'},
   {id:'game',    name:'游戏资讯', icon:'🎮', src:'local', file:'data/game_news.json',    label:'游戏媒体'},
   {id:'finance', name:'财经资讯', icon:'📈', src:'local', file:'data/finance_news.json', label:'财经要闻'},
-  {id:'realtime',name:'实时全网', icon:'⚡', src:'ai', label:'AI 联网检索（推荐 Kimi）'},
+  {id:'realtime',name:'实时全网', icon:'⚡', src:'ai', label:'AI 联网检索（推荐通义千问）'},
 ];
 const API_BASE = { sixty:'https://60s.viki.moe/v2', aihot:'https://aihot.virxact.com/api/v1' };
 
@@ -184,7 +184,7 @@ async function loadCategory(catId, force){
     /* 「AI 联网检索」分类：内容由设置里启用的大模型实时检索生成。
        Kimi/Moonshot 模型走内置 $web_search 真联网；其余模型基于知识尽力而为。 */
     const llm=getActiveAiModel();
-    if(!llm) throw new Error('请先在「设置 → AI 大模型」启用并填好一个模型（Kimi 可获得真联网检索）');
+    if(!llm) throw new Error('请先在「设置 → AI 大模型」启用并填好一个模型（通义千问可获得快而真的联网检索）');
     items=await callLLMSearchNews(cfg, llm, aiNewsSeeds(catId));
   }else{
     const payload=await fetchJSON(API_BASE[cfg.src]+cfg.path);
@@ -468,23 +468,40 @@ async function doAiNewsRefresh(){
   }catch(e){
     console.warn('AI 实时搜索失败：', e&&e.message);
     $('#newsSyncState').textContent='AI 检索失败，请重试';
-    toast('AI 检索失败：'+(e&&e.message||e),'warn');
+    toast('AI 检索失败：'+friendlyAiErr(e),'warn');
   }finally{
     btn.classList.remove('spinning'); btn.disabled=false;
     setTimeout(()=>{ if(!btn.classList.contains('spinning')) $('#newsSyncState').textContent='点击刷新加载热点'; },4000);
   }
+}
+/* 把底层运行时错误转成用户可读文案（超时/中断/网络等），其余透出原信息 */
+function friendlyAiErr(e){
+  const m=String((e&&e.message)||'').toLowerCase();
+  if(m.includes('abort')||m.includes('timed out')||m.includes('timeout')||e&&e.name==='AbortError')
+    return '请求超时或被中断：Kimi 联网搜索较慢，已放宽到 90 秒。若仍超时请检查网络或换信号好的网络重试';
+  if(m.includes('返回内容开头')) return String(e.message);
+  if(m.includes('not be parsed')||m.includes('format')||m.includes('unexpected')) return '模型返回内容格式异常，请重试一次';
+  return String((e&&e.message)||e||'未知错误');
 }
 /* 判定该模型配置是否走 Kimi/Moonshot（原生内置 $web_search 联网搜索） */
 function isKimiModel(cfg){
   const b=String((cfg&&cfg.baseUrl)||'').toLowerCase();
   return b.includes('moonshot');
 }
-/* 规整 baseUrl：去掉结尾斜杠；若填的是常见的域名根（漏了 /v1），自动补上。
-   例：https://api.moonshot.cn  →  https://api.moonshot.cn/v1 */
+/* 判定是否走通义千问 / 阿里云百炼 DashScope（OpenAI 兼容端点 enable_search 联网搜索） */
+function isQwenModel(cfg){
+  const b=String((cfg&&cfg.baseUrl)||'').toLowerCase();
+  return b.includes('dashscope') || b.includes('aliyuncs.com') || b.includes('tongyi');
+}
+/* 规整 baseUrl：去掉结尾斜杠；若填的是常见的域名根（漏了 /v1 或 /compatible-mode/v1），自动补上。
+   例：https://api.moonshot.cn         → https://api.moonshot.cn/v1
+       https://dashscope.aliyuncs.com  → https://dashscope.aliyuncs.com/compatible-mode/v1 */
 function normBaseUrl(baseUrl){
   let b=String(baseUrl||'').trim().replace(/\/+$/,'');
   if(!b) return '';
-  if(!/\/v\d+$/i.test(b) && (isKimiModel({baseUrl:b}) || /api\.(deepseek|openai)\.com$/i.test(b))){
+  if(isQwenModel({baseUrl:b}) && !/\/compatible-mode\/v\d+$/i.test(b) && !/\/v\d+$/i.test(b)){
+    b+='/compatible-mode/v1';
+  }else if(!/\/v\d+$/i.test(b) && (isKimiModel({baseUrl:b}) || /api\.(deepseek|openai)\.com$/i.test(b))){
     b+='/v1';
   }
   return b;
@@ -501,12 +518,36 @@ async function throwRespError(r, fallback){
   err.status=r.status;
   throw err;
 }
-/* 解析大模型返回文本里的 JSON 数组（兼容被文字/代码块包裹的情况） */
+/* 解析大模型返回文本里的 JSON 数组（兼容被 ```json 代码块 / 文字 / 多余括号包裹的情况）。
+   多级降级：先剥代码块围栏 → 定位首个 [ 到与之配对的 ] → JSON.parse；失败再退回首个[到末尾]启发式。 */
 function extractJsonArray(content){
   if(!content) return [];
-  let m=content.match(/\[[\s\S]*\]/);
-  const arr=JSON.parse(m?m[0]:content);
-  return Array.isArray(arr)?arr:[];
+  let s=String(content);
+  s=s.replace(/```(?:json)?/gi,'');   // 去掉 ```json / ``` 围栏
+  const start=s.indexOf('[');
+  if(start<0) return [];
+  // 从首个 [ 起，按深度匹配到闭合的 ]（忽略字符串内部括号的简单处理：只匹配深度，失败再降级）
+  let depth=0, inStr=false, esc=false, end=-1;
+  for(let i=start;i<s.length;i++){
+    const c=s[i];
+    if(esc){ esc=false; continue; }
+    if(inStr){
+      if(c==='\\') esc=true;
+      else if(c==='"') inStr=false;
+      continue;
+    }
+    if(c==='"') inStr=true;
+    else if(c==='[') depth++;
+    else if(c===']'){ depth--; if(depth===0){ end=i; break; } }
+  }
+  let jsonStr = end>start ? s.slice(start,end+1) : s.slice(start);
+  try{ const arr=JSON.parse(jsonStr); return Array.isArray(arr)?arr:[]; }
+  catch(e){ /* 括号内字符串含转义异常等，降级到末尾启发式 */ }
+  try{
+    const m=s.match(/\[[\s\S]*\]/);
+    const arr=JSON.parse(m?m[0]:s);
+    return Array.isArray(arr)?arr:[];
+  }catch(e){ return []; }
 }
 /* 把通用条目归一化为 App 资讯项 */
 function toAiNewsItems(arr, cfgCat){
@@ -522,15 +563,18 @@ function toAiNewsItems(arr, cfgCat){
 }
 /* 用 Kimi/Moonshot 的 $web_search 原生工具跑一轮对话，返回最终 content。
    关键：先声明 builtin_function，若返回 tool_calls 就把 arguments 原样回传(role=tool)，
-   循环直到 finish_reason 不再是 tool_calls。 */
-async function kimiChatFetch(url, cfg, messages, maxRounds){
+   循环直到 finish_reason 不再是 tool_calls。
+   Kimi 联网搜索需先在服务端执行检索、再基于海量结果生成完整回答，耗时明显高于普通对话，
+   因此超时放宽到 timeoutMs（默认 75s），并设 max_tokens 保证长回答不被截断。 */
+async function kimiChatFetch(url, cfg, messages, maxRounds, timeoutMs){
   const headers={'Content-Type':'application/json','Authorization':'Bearer '+cfg.key};
   /* Kimi 仅允许 temperature=1：这里不传该参数（服务端按默认 1 走），否则会 400 invalid temperature */
-  const baseBody={model:cfg.model, stream:false};
+  const baseBody={model:cfg.model, stream:false, max_tokens: Number(cfg.maxTokens)||4096};
+  const perRound=(Number(timeoutMs)&&timeoutMs>0)?timeoutMs:75000;
   let msgs=messages.slice();
   for(let round=0; round<maxRounds; round++){
     const ctl=new AbortController();
-    const timer=setTimeout(()=>ctl.abort(), 25000);
+    const timer=setTimeout(()=>ctl.abort(), perRound);
     try{
       const r=await fetch(url,{method:'POST',headers,
         body:JSON.stringify(Object.assign({},baseBody,{messages:msgs,
@@ -554,18 +598,44 @@ async function kimiChatFetch(url, cfg, messages, maxRounds){
   }
   throw new Error('搜索轮次过多');
 }
+/* 用通义千问/阿里云百炼的 enable_search 原生联网（OpenAI 兼容 chat/completions）。
+   与 Kimi 不同：通义只需在请求体顶层加 enable_search:true，服务端自动搜索，返回 content
+   即为最终回答，无需 tool_calls 循环 → 更快、更省。qwen 支持正常 temperature。
+   timeoutMs 默认 45s（通义比 Kimi 快，但联网搜索仍需缓冲）。 */
+async function qwenSearchFetch(url, cfg, messages, timeoutMs){
+  const ctl=new AbortController();
+  const t=(Number(timeoutMs)&&timeoutMs>0)?timeoutMs:45000;
+  const timer=setTimeout(()=>ctl.abort(), t);
+  try{
+    const body={model:cfg.model, stream:false, temperature:0.5, max_tokens:Number(cfg.maxTokens)||4096,
+      enable_search:true, messages};
+    const r=await fetch(url,{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
+      body:JSON.stringify(body), signal:ctl.signal});
+    if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
+    const j=await r.json();
+    const c=(j&&j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'';
+    return c;
+  }finally{ clearTimeout(timer); }
+}
 /* 调用大模型实时检索某一分类的最新资讯，要求返回紧凑 JSON 数组。
-   Kimi/Moonshot 模型原生联网（$web_search）；其余模型保持原逻辑（能力所限多基于模型知识）。 */
+   通义千问(DashScope) enable_search 原生联网（主推，快）；Kimi/Moonshot 用 $web_search；
+   其余模型保持原逻辑（能力所限多基于模型知识）。 */
 async function callLLMSearchNews(cfgCat, cfg, seeds){
   const base=normBaseUrl(cfg.baseUrl);
   const url=base+'/chat/completions';
   const sys='你是一个实时新闻聚合助手。请针对用户指定的资讯分类，联网检索并汇总当前（最近数小时内）真正新鲜的热点资讯。只输出有效的最新条目，避免过时或重复内容。必须严格输出 JSON 数组，格式：[{"t":"标题","d":"一句话摘要","tag":"简短领域标签","url":"来源链接(可空)"}]，6-10 条，按新鲜度/热度排序。不要输出 JSON 以外的任何文字。';
   const catDesc=`分类：${cfgCat.name}（来源平台：${cfgCat.label||''}）。当前榜单上的种子话题：${(seeds||[]).join('、')}。请基于这些方向检索更新鲜的条目；若你无法真实联网，则基于你的最新知识给出你认为此刻应关注的热点（请在摘要里克制、勿编造具体到分钟的细节）。`;
   let content;
-  if(isKimiModel(cfg)){
+  if(isQwenModel(cfg)){
+    // 通义千问：enable_search 原生联网，单请求返回最终回答（主推，更快）
+    content=await qwenSearchFetch(url, cfg,
+      [{role:'system',content:sys},{role:'user',content:catDesc}], 50000);
+  }else if(isKimiModel(cfg)){
     // Kimi：内置 $web_search 真联网，需跑 tool_calls 循环
+    // 搜索+生成长 JSON 耗时高，给足 90s/轮，避免被中断（fetch is aborted）
     content=await kimiChatFetch(url, cfg,
-      [{role:'system',content:sys},{role:'user',content:catDesc}], 4);
+      [{role:'system',content:sys},{role:'user',content:catDesc}], 4, 90000);
   }else{
     const ctl=new AbortController();
     const timer=setTimeout(()=>ctl.abort(), 25000);
@@ -582,7 +652,10 @@ async function callLLMSearchNews(cfgCat, cfg, seeds){
     }finally{ clearTimeout(timer); }
   }
   const arr=extractJsonArray(content);
-  if(!arr.length) throw new Error('返回格式不正确');
+  if(!arr.length){
+    const preview=String(content||'').trim().slice(0,60);
+    throw new Error('AI 未返回可解析的资讯条目'+(preview?'（返回内容开头：'+preview+'…）':''));
+  }
   return toAiNewsItems(arr, cfgCat);
 }
 /* 与当前已展示条目按标题去重，返回真正新增的条目 */
@@ -1418,10 +1491,23 @@ async function testConnection(c){
   const base=normBaseUrl(c.baseUrl);
   if(!base) throw new Error('接口地址为空');
   const url=base+'/chat/completions';
-  const usr=isKimiModel(c)
+  // 校验问题：联网模型问时间（触发联网），普通模型问专注
+  const usr=(isKimiModel(c)||isQwenModel(c))
     ? '用一句话说：现在是几点钟，请只回答你能确定的内容。'
     : '用一句话说说什么是专注';
-  if(isKimiModel(c)){
+  if(isQwenModel(c)){
+    // 通义：enable_search 校验「接口+Key+模型+联网」全链路
+    const ctl=new AbortController();
+    const timer=setTimeout(()=>ctl.abort(), Number(c.timeout)||20000);
+    try{
+      const r=await fetch(url,{method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
+        body:JSON.stringify({model:c.model, messages:[{role:'user',content:usr}],
+          stream:false, temperature:0.5, enable_search:true}),
+        signal:ctl.signal});
+      if(!r.ok) await throwRespError(r, 'HTTP '+r.status);
+    }finally{ clearTimeout(timer); }
+  }else if(isKimiModel(c)){
     await kimiChatFetch(url, c,
       [{role:'user', content:usr}], 2);
   }else{
@@ -1438,18 +1524,35 @@ async function testConnection(c){
     }finally{ clearTimeout(timer); }
   }
 }
-/* 把连接错误翻译成对用户可操作的排查建议 */
-function explainAiErr(e){
+/* 把连接错误翻译成对用户可操作的排查建议（兼容 Kimi / 通义千问 / 其它 OpenAI 兼容） */
+function explainAiErr(e, vendor){
   const s=(e&&e.status)||0;
   const m=String((e&&e.message)||'').toLowerCase();
-  if(s===401||m.includes('invalid authentication')||m.includes('unauthorized')||m.includes('api key')) return 'Key 无效：请到 platform.moonshot.cn（或其他平台）检查/重新创建 API Key，注意 sk- 开头、勿有多余空格或换行';
+  const isQ=(vendor==='qwen');
+  const isK=(vendor==='kimi');
+  if(s===401||m.includes('invalid authentication')||m.includes('unauthorized')||m.includes('invalid api-key')||m.includes('api key')){
+    return isQ?'Key 无效：请到阿里云百炼控制台 bailian.console.aliyun.com 创建/检查 API Key（DashScope Key），注意勿有多余空格或换行'
+      :'Key 无效：请到 platform.moonshot.cn（或其他平台）检查/重新创建 API Key，注意 sk- 开头、勿有多余空格或换行';
+  }
   if(m.includes('invalid temperature')||m.includes('only 1 is allowed')) return 'Kimi 只允许 temperature=1：已自动不传该参数，若仍出现请刷新页面后重试';
-  if(s===404||m.includes('url.not_found')||m.includes('not found')) return '接口地址不对：Kimi 应为 https://api.moonshot.cn/v1（结尾要带 /v1）；若你填了别的地址请核对';
-  if(s===400||m.includes('invalid')&&!m.includes('authentication')) return '参数有误，多半是模型名不对：Kimi 模型名请填 kimi-k2.6 或 kimi-k3（k3 更贵）';
-  if(m.includes('insufficient')||m.includes('balance')||m.includes('quota')) return '余额/额度不足：Kimi 需充值或体验金不足，去 platform.moonshot.cn 查看';
-  if(m.includes('model_not_found')||m.includes('does not exist')) return '模型名不存在，请核对（Kimi：kimi-k2.6 / kimi-k3）';
+  if(s===404||m.includes('url.not_found')||m.includes('not found')){
+    return isQ?'接口地址不对：通义千问应为 https://dashscope.aliyuncs.com/compatible-mode/v1（结尾带 /compatible-mode/v1）'
+      :'接口地址不对：Kimi 应为 https://api.moonshot.cn/v1（结尾要带 /v1）；若你填了别的地址请核对';
+  }
+  if(s===400||m.includes('invalid')&&!m.includes('authentication')){
+    return isQ?'参数有误，多半是模型名不对：通义千问联网模型请填 qwen-plus 或 qwen-flash（更快的入门档）'
+      :(isK?'参数有误，多半是模型名不对：Kimi 模型名请填 kimi-k2.6 或 kimi-k3（k3 更贵）':'参数有误，请检查模型名是否正确');
+  }
+  if(m.includes('insufficient')||m.includes('balance')||m.includes('quota')){
+    return isQ?'余额/额度不足：阿里云百炼需开通按量付费或有余量，去 bailian.console.aliyun.com 查看'
+      :'余额/额度不足：Kimi 需充值或体验金不足，去 platform.moonshot.cn 查看';
+  }
+  if(m.includes('model_not_found')||m.includes('does not exist')||m.includes('not_allow')) {
+    return isQ?'模型名不存在或未开通：通义千问请核对（qwen-plus / qwen-flash）是否在当前百炼控制台可用'
+      :'模型名不存在，请核对（Kimi：kimi-k2.6 / kimi-k3）';
+  }
   if(s===429||m.includes('rate limit')) return '请求过于频繁被限流，稍等几秒再试';
-  if(!s&&(m.includes('failed to fetch')||m.includes('network')||m.includes('abort')||m.includes('timeout'))) return '无法连接服务器：请检查网络；若用 api.moonshot.ai（海外端点）国内常不通，请改用 api.moonshot.cn';
+  if(!s&&(m.includes('failed to fetch')||m.includes('network')||m.includes('abort')||m.includes('timeout'))) return '无法连接服务器：请检查网络；海外端点(api.moonshot.ai 等)国内常不通，请改用国内端点';
   return null;
 }
 async function addIdea(text,src='text',doDiverge=true){
@@ -1778,11 +1881,21 @@ function initSettings(){
     const kp=ui('#aiKimiPreset');
     if(kp){
       kp.onclick=()=>{
-        ui('#aiEditName').value='Kimi（推荐联网）';
+        ui('#aiEditName').value='Kimi（联网备选）';
         ui('#aiEditBaseUrl').value='https://api.moonshot.cn/v1';
         ui('#aiEditModel').value='kimi-k2.6';
         ui('#aiEditEnabled').classList.add('on');
         toast('已填入 Kimi 预设，只差粘贴 API Key');
+      };
+    }
+    const qp=ui('#aiQwenPreset');
+    if(qp){
+      qp.onclick=()=>{
+        ui('#aiEditName').value='通义千问（联网推荐）';
+        ui('#aiEditBaseUrl').value='https://dashscope.aliyuncs.com/compatible-mode/v1';
+        ui('#aiEditModel').value='qwen-plus';
+        ui('#aiEditEnabled').classList.add('on');
+        toast('已填入通义千问预设，只差粘贴百炼 API Key');
       };
     }
     ui('#aiEditSave').onclick=()=>{
@@ -1816,7 +1929,8 @@ function initSettings(){
       await testConnection(c);
       toast('连接成功，大模型可用 ✓');
     }catch(e){
-      const hint=explainAiErr(e);
+      const vendor=isQwenModel(c)?'qwen':(isKimiModel(c)?'kimi':'');
+      const hint=explainAiErr(e, vendor);
       console.warn('AI 连接测试失败：', e&&e.message, 'status', e&&e.status);
       const shown=(e&&e.message)||'未知错误';
       toast('连接失败：'+shown+(hint?'（'+hint+'）':''),'err');

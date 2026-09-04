@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Noto+Serif+SC:wght@600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
 <div class="grain"></div>
@@ -366,20 +366,23 @@
     <div class="modal-body">
       <label class="field">
         <span>模型名称</span>
-        <input id="aiEditName" placeholder="例如：Kimi（推荐联网）" maxlength="30">
+        <input id="aiEditName" placeholder="例如：通义千问（联网快）" maxlength="30">
       </label>
-      <button class="btn mini ghost" id="aiKimiPreset" type="button" style="margin:2px 0 10px">＋ 一键填入 Kimi 预设</button>
+      <div class="preset-row" style="margin:2px 0 10px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn mini primary" id="aiQwenPreset" type="button">＋ 通义千问（推荐·快）</button>
+        <button class="btn mini ghost" id="aiKimiPreset" type="button">＋ Kimi（备选）</button>
+      </div>
       <label class="field">
         <span>接口地址</span>
-        <input id="aiEditBaseUrl" placeholder="https://api.moonshot.cn/v1" inputmode="url">
+        <input id="aiEditBaseUrl" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" inputmode="url">
       </label>
       <label class="field">
         <span>API Key</span>
-        <input id="aiEditKey" type="password" placeholder="sk-…（platform.moonshot.cn 创建）" autocomplete="off">
+        <input id="aiEditKey" type="password" placeholder="sk-…（百炼 bailian.console.aliyun.com 创建）" autocomplete="off">
       </label>
       <label class="field">
         <span>模型名</span>
-        <input id="aiEditModel" placeholder="kimi-k2.6（可联网，性价比高）">
+        <input id="aiEditModel" placeholder="qwen-plus（联网快；更省可 qwen-flash）">
       </label>
       <div class="ai-row">
         <label class="switch-line"><span class="switch" id="aiEditEnabled"><i></i></span><span class="switch-label">启用此模型</span></label>
@@ -444,6 +447,6 @@
   </div>
 </div>
 
-<script src="app.js?v=17"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

@@ -217,10 +217,12 @@ b{font-weight:700}
    ============================================================ */
 .module{margin-top:10px;animation:rise .35s cubic-bezier(.2,.7,.2,1)}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.mod-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.mod-title{font-family:var(--serif);font-size:21px;font-weight:900;letter-spacing:.5px;position:relative;display:inline-block}
-.mod-desc{font-size:11.5px;color:var(--ink-3);margin-top:8px}
-.mod-actions,.news-actions{display:flex;gap:8px;align-items:center}
+.mod-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-bottom:14px}
+/* 标题文字区可收缩省略、按钮组固定不跳位：状态文字变长/变短不会再把右侧按钮挤到下一行 */
+.mod-head>div:first-child{flex:1;min-width:0}
+.mod-title{font-family:var(--serif);font-size:21px;font-weight:900;letter-spacing:.5px;position:relative;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mod-desc{font-size:11.5px;color:var(--ink-3);margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mod-actions,.news-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
 
 /* 按钮 */
 .btn{
