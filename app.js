@@ -38,6 +38,7 @@ const State = {
   aiSummaries:{},
   ideas: [],
   ideaAi:true,
+  aiConfig:{ baseUrl:'', key:'', model:'', useLLM:false, timeout:15000 },
   calYear:new Date().getFullYear(),
   calMonth:new Date().getMonth(),
   theme:'warm',
@@ -354,27 +355,75 @@ function initNews(){
   $('#newsCatReset').onclick=()=>{ State.newsCats=defaultNewsCats(); renderNewsCatEditor(); toast('已恢复默认分类'); };
 }
 
-/* 渲染分类管理列表（开关 + 上移/下移） */
+/* 渲染分类管理列表（开关 + 拖拽排序） */
 function renderNewsCatEditor(){
   const list=$('#newsCatList'); if(!list) return; list.innerHTML='';
   let cfg = (State.newsCats && State.newsCats.length) ? State.newsCats : (State.newsCats=defaultNewsCats());
   const ids=cfg.map(x=>x.id);
   NEWS_MASTER.forEach(c=>{ if(!ids.includes(c.id)) cfg.push({id:c.id,enabled:true}); });
-  cfg.forEach((row,idx)=>{
+  cfg.forEach((row)=>{
     const m=findCat(row.id); if(!m) return;
-    const el=document.createElement('div'); el.className='nc-row';
+    const el=document.createElement('div'); el.className='nc-row'; el.dataset.id=row.id;
     el.innerHTML=`
-      <div class="nc-move">
-        <button class="nc-up" ${idx===0?'disabled':''} title="上移">▲</button>
-        <button class="nc-down" ${idx===cfg.length-1?'disabled':''} title="下移">▼</button>
-      </div>
+      <div class="nc-grip" title="按住拖拽排序">⠿</div>
       <div class="nc-icon">${m.icon}</div>
       <div class="nc-name"><b>${esc(m.name)}</b><span>${esc(m.label)}</span></div>
       <label class="switch nc-switch ${row.enabled?'on':''}"><input type="checkbox" ${row.enabled?'checked':''}><i></i></label>`;
-    el.querySelector('.nc-up').onclick=()=>{ if(idx>0){ [cfg[idx-1],cfg[idx]]=[cfg[idx],cfg[idx-1]]; renderNewsCatEditor(); } };
-    el.querySelector('.nc-down').onclick=()=>{ if(idx<cfg.length-1){ [cfg[idx+1],cfg[idx]]=[cfg[idx],cfg[idx+1]]; renderNewsCatEditor(); } };
     el.querySelector('input').onchange=e=>{ row.enabled=e.target.checked; el.querySelector('.nc-switch').classList.toggle('on', e.target.checked); };
     list.appendChild(el);
+  });
+  bindNewsCatSort();
+}
+/* 拖拽排序：基于 Pointer 事件，兼容鼠标与触屏；落点后把 DOM 顺序写回 State.newsCats */
+function bindNewsCatSort(){
+  const list=$('#newsCatList'); if(!list) return;
+  let dragRow=null, offsetY=0;
+  function onDown(e, row){
+    e.preventDefault();
+    dragRow=row;
+    const r=row.getBoundingClientRect();
+    offsetY=e.clientY - r.top;
+    row.classList.add('nc-dragging');
+    row.style.width=r.width+'px';
+    row.style.position='fixed';
+    row.style.left=r.left+'px';
+    row.style.zIndex='1000';
+    row.style.pointerEvents='none';
+    document.body.style.userSelect='none';
+    moveRow(e.clientY);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, {once:true});
+  }
+  function moveRow(cy){
+    if(!dragRow) return;
+    const r=dragRow.getBoundingClientRect();
+    dragRow.style.top=(cy-offsetY)+'px';
+    dragRow.style.left=r.left+'px';
+    const sibs=[...list.querySelectorAll('.nc-row')].filter(x=>x!==dragRow);
+    let target=null;
+    for(const s of sibs){
+      const rc=s.getBoundingClientRect();
+      if(cy < rc.top + rc.height/2){ target=s; break; }
+    }
+    if(target) list.insertBefore(dragRow, target);
+    else list.appendChild(dragRow);
+  }
+  function onMove(e){ moveRow(e.clientY); }
+  function onUp(){
+    window.removeEventListener('pointermove', onMove);
+    if(!dragRow) return;
+    dragRow.classList.remove('nc-dragging');
+    dragRow.style.position=''; dragRow.style.top=''; dragRow.style.left='';
+    dragRow.style.zIndex=''; dragRow.style.width=''; dragRow.style.pointerEvents='';
+    document.body.style.userSelect='';
+    const order=[...list.querySelectorAll('.nc-row')].map(x=>x.dataset.id);
+    if(State.newsCats && State.newsCats.length){
+      State.newsCats.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+    }
+    dragRow=null;
+  }
+  list.querySelectorAll('.nc-row').forEach(row=>{
+    row.querySelector('.nc-grip').addEventListener('pointerdown', e=>onDown(e, row));
   });
 }
 /* 保存分类配置并刷新界面 */
@@ -431,6 +480,15 @@ function toggleTaskCheck(taskId){
     if(ix>=0){ t.doneDates.splice(ix,1); toast('已取消今日打卡'); }
     else{ t.doneDates.push(td); toast('今日打卡成功 ✓'); }
     t.done=false;
+  }
+  /* 联动工作总结：任务变为「已完成」时，自动写入一条日志（按天去重） */
+  const today=todayStr();
+  const isDone = t.period==='none' ? t.done : (t.doneDates||[]).includes(today);
+  if(isDone && t.lastLoggedDoneDate!==today){
+    t.lastLoggedDoneDate=today;
+    const recur = t.period!=='none' ? `（${PERIOD_LABEL[t.period]}）` : '';
+    addLogEntry(`完成「${t.title}」任务${recur}`, 'task');
+    toast('已同步到工作总结 ✓');
   }
   save(); renderTaskArea();
 }
@@ -990,11 +1048,44 @@ function divergeScene(t,light,place){
   ];
   return {kind:'scene',topic:'场景补全 · '+ (light||'日常'),lines};
 }
-function addIdea(text,src='text',doDiverge=true){
+/* 计算灵感发散：开启大模型则用真实 LLM，否则用内置启发式 */
+async function computeDiverge(text){
+  const cfg=State.aiConfig;
+  if(cfg && cfg.useLLM && cfg.baseUrl && cfg.key && cfg.model){
+    try{
+      const lines=await callLLMDiverge(text, cfg);
+      if(lines && lines.length) return {kind:'llm', topic:'AI 发散', lines};
+    }catch(e){
+      console.warn('大模型发散失败，回退内置启发式：', e && e.message);
+    }
+  }
+  return aiDiverge(text);
+}
+/* 调用 OpenAI 兼容的大模型接口做灵感发散 */
+async function callLLMDiverge(text, cfg){
+  const sys='你是一个灵感发散助手。针对用户给出的一句灵感、场景或想法，输出 4-6 条有启发、可探索的发散角度，每条一行，直接给要点，不要解释，不要编号外的多余文字。';
+  const user='灵感：「'+text+'」\n请发散出几个值得探索的角度：';
+  const base=String(cfg.baseUrl||'').replace(/\/+$/,'');
+  const url=base+'/chat/completions';
+  const ctl=new AbortController();
+  const timer=setTimeout(()=>ctl.abort(), Number(cfg.timeout)||15000);
+  try{
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
+      body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:user}], temperature:0.8, stream:false}),
+      signal:ctl.signal
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    return content.split(/\n+/).map(s=>s.replace(/^\s*[-*•0-9．.、]\s*/,'').trim()).filter(Boolean).slice(0,8);
+  }finally{ clearTimeout(timer); }
+}
+async function addIdea(text,src='text',doDiverge=true){
   const idea={id:uid(),text,date:new Date().toLocaleString('zh-CN',{hour12:false}),src,diverge:null};
   if(doDiverge&&State.ideaAi){
-    const r=aiDiverge(text);
-    idea.diverge=r;
+    idea.diverge=await computeDiverge(text);
   }
   State.ideas.unshift(idea);
   save(); renderIdeas();
@@ -1154,20 +1245,20 @@ function handleVoiceResult(ctx,text){
   else if(ctx==='report') openReportConfirm(text);
   else openIdeaConfirm(text);
 }
-/* 工作总结语音：先把识别到的内容弹窗展示，确认后作为「语音」条目入库 */
+/* 工作总结语音：先把识别到的内容弹窗展示（可修改），确认后作为「语音」条目入库 */
 function openReportConfirm(text){
   if(!text || !text.trim()){ toast('语音识别结果为空','warn'); return; }
   window.__voiceReport=text;
   $('#voiceModalTitle').textContent='确认今日工作';
   $('#voiceModalTag').textContent='🎤 语音识别结果';
   $('#voiceModalBody').innerHTML=`
-    <div class="vm-label">识别到的内容</div>
-    <div class="vm-idea">${esc(text)}</div>
+    <div class="vm-label">识别到的内容（可修改）</div>
+    <textarea class="vm-edit" id="voiceEditText">${esc(text)}</textarea>
     <div class="vm-hint">确认后作为一条「语音」条目记入今日日志${State.ideaAi?'，可继续点「生成今日总结」做 AI 归纳。':''}</div>`;
   const ok=$('#voiceModalOk');
   ok.textContent='✓ 记入今日日志';
   ok.onclick=()=>{
-    const t=window.__voiceReport;
+    const t=($('#voiceEditText').value||'').trim() || window.__voiceReport;
     if(t && addLogEntry(t,'voice')) toast('已录入一条语音内容 🎤');
     window.__voiceReport=null;
     closeVoiceModal();
@@ -1204,17 +1295,18 @@ function openIdeaConfirm(text){
   $('#voiceModalTitle').textContent='确认灵感';
   $('#voiceModalTag').textContent='🎤 语音识别结果';
   $('#voiceModalBody').innerHTML=`
-    <div class="vm-label">识别到的内容</div>
-    <div class="vm-idea">${esc(text)}</div>
+    <div class="vm-label">识别到的内容（可修改）</div>
+    <textarea class="vm-edit" id="voiceEditIdea">${esc(text)}</textarea>
     <div class="vm-hint">确认后保存为一条灵感${State.ideaAi?'，并自动进行 AI 发散。':''}</div>`;
   const ok=$('#voiceModalOk');
   ok.textContent='✓ 保存灵感';
-  ok.onclick=()=>{ saveVoiceIdea(); };
+  ok.onclick=()=>{ saveVoiceIdea(($('#voiceEditIdea').value||'').trim() || window.__voiceIdea); };
   $('#voiceModalCancel').onclick=()=>{ window.__voiceIdea=null; closeVoiceModal(); };
   $('#voiceModal').classList.remove('hidden');
 }
-function saveVoiceIdea(){
-  const text=window.__voiceIdea; if(!text) return;
+function saveVoiceIdea(text){
+  text = text || window.__voiceIdea;
+  if(!text) return;
   addIdea(text,'voice',State.ideaAi);
   window.__voiceIdea=null;
   closeVoiceModal();
@@ -1256,6 +1348,42 @@ function initTheme(){
   };
   applyTheme(State.theme);
 }
+/* 设置面板：AI 大模型配置（灵感发散用真实 LLM） */
+function initSettings(){
+  const ui=id=>$(id);
+  const sync=()=>{
+    State.aiConfig={
+      baseUrl:(ui('#aiBaseUrl').value||'').trim(),
+      key:(ui('#aiKey').value||'').trim(),
+      model:(ui('#aiModel').value||'').trim(),
+      useLLM:State.aiConfig.useLLM,
+      timeout:Number(State.aiConfig.timeout)||15000,
+    };
+    save();
+  };
+  ui('#aiBaseUrl').value=State.aiConfig.baseUrl||'';
+  ui('#aiKey').value=State.aiConfig.key||'';
+  ui('#aiModel').value=State.aiConfig.model||'';
+  ui('#aiUseSwitch').classList.toggle('on', !!State.aiConfig.useLLM);
+  ['#aiBaseUrl','#aiKey','#aiModel'].forEach(s=>ui(s).addEventListener('input', sync));
+  ui('#aiUseSwitch').onclick=()=>{
+    State.aiConfig.useLLM=!State.aiConfig.useLLM;
+    ui('#aiUseSwitch').classList.toggle('on', State.aiConfig.useLLM);
+    save();
+    toast(State.aiConfig.useLLM?'已开启大模型发散':'已用内置启发式');
+  };
+  ui('#aiTestBtn').onclick=async()=>{
+    const c=State.aiConfig;
+    if(!c.baseUrl||!c.key||!c.model){ toast('请先填好接口地址、Key 和模型名','warn'); return; }
+    const btn=ui('#aiTestBtn'); btn.textContent='测试中…'; btn.disabled=true;
+    try{
+      const lines=await callLLMDiverge('用一句话说说什么是专注', c);
+      if(lines && lines.length) toast('连接成功，大模型可用 ✓');
+      else toast('连接成功但未返回内容，请检查模型名','warn');
+    }catch(e){ toast('连接失败：'+(e&&e.message||e),'err'); }
+    finally{ btn.textContent='测试连接'; btn.disabled=false; }
+  };
+}
 
 /* =============================================================
    导航 / 初始化
@@ -1289,7 +1417,7 @@ function save(){
   Store.write({
     tasks:State.tasks, log:State.log, aiSummaries:State.aiSummaries,
     ideas:State.ideas, ideaAi:State.ideaAi, theme:State.theme,
-    newsCats:State.newsCats,
+    newsCats:State.newsCats, aiConfig:State.aiConfig,
   });
 }
 function load(){
@@ -1311,6 +1439,15 @@ function load(){
   if(d.aiSummaries) State.aiSummaries=d.aiSummaries;
   if(Array.isArray(d.ideas)) State.ideas=d.ideas;
   if(typeof d.ideaAi==='boolean') State.ideaAi=d.ideaAi;
+  if(d.aiConfig && typeof d.aiConfig==='object'){
+    State.aiConfig={
+      baseUrl:String(d.aiConfig.baseUrl||'').trim(),
+      key:String(d.aiConfig.key||'').trim(),
+      model:String(d.aiConfig.model||'').trim(),
+      useLLM:!!d.aiConfig.useLLM,
+      timeout:Number(d.aiConfig.timeout)||15000,
+    };
+  }
   if(['warm','cold','night'].includes(d.theme)) State.theme=d.theme;
 }
 /* 首次使用：不预置任何示例任务/日志/灵感，保持干净 */
@@ -1353,6 +1490,7 @@ function init(){
   initReportModule();
   initIdeaModule();
   initTheme();
+  initSettings();
   // 语音控制
   $('#pillStop').onclick=()=>stopVoice();
   $('#voiceModalClose').onclick=closeVoiceModal;

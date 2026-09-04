@@ -40,10 +40,10 @@
     </div>
   </header>
 
-  <!-- 主题面板（抽屉） -->
+  <!-- 设置面板（抽屉） -->
   <aside class="theme-panel hidden" id="themePanel">
     <div class="panel-title">
-      <h3>选择色调</h3>
+      <h3>设置</h3>
       <button class="icon-btn" id="themeClose">×</button>
     </div>
     <div class="theme-options">
@@ -68,6 +68,18 @@
           <span>纯黑 · 弱光护眼</span>
         </div>
       </button>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="theme-info">
+      <h4>AI 大模型（灵感发散）</h4>
+      <label class="field ai-field"><span>接口地址</span><input id="aiBaseUrl" placeholder="https://api.openai.com/v1" inputmode="url"></label>
+      <label class="field ai-field"><span>API Key</span><input id="aiKey" type="password" placeholder="sk-…" autocomplete="off"></label>
+      <label class="field ai-field"><span>模型名称</span><input id="aiModel" placeholder="gpt-4o-mini"></label>
+      <div class="ai-row">
+        <label class="switch-line"><span class="switch" id="aiUseSwitch"><i></i></span><span class="switch-label">用大模型生成 AI 发散</span></label>
+        <button class="btn mini ghost" id="aiTestBtn">测试连接</button>
+      </div>
+      <p class="ai-note">开启后，灵感发散将调用你填写的大模型（OpenAI 兼容接口）替代内置启发式。需服务端开启 CORS（如本地 Ollama、兼容 OpenAI 的网关）；调用失败会自动回退到内置方案。</p>
     </div>
     <div class="panel-divider"></div>
     <div class="theme-info">
@@ -332,7 +344,7 @@
       <button class="modal-x" id="newsCatClose">×</button>
     </div>
     <div class="modal-body">
-      <p class="nc-tip">开启/关闭要展示的分类，用 ▲ ▼ 调整顺序（顶部的分类显示在资讯标签最前）。</p>
+      <p class="nc-tip">开启/关闭要展示的分类，<b>按住左侧 ⠿ 手柄上下拖拽</b>调整顺序（顶部的分类显示在资讯标签最前）。</p>
       <div class="nc-list" id="newsCatList"></div>
     </div>
     <div class="modal-foot">
