@@ -112,7 +112,7 @@
           <p class="mod-desc">清单 · 周期 · 日历</p>
         </div>
         <div class="mod-actions">
-          <button class="btn ghost" id="taskVoiceBtn">🎤</button>
+          <button class="btn ghost" id="taskVoiceBtn" data-voice-btn>🎤</button>
           <button class="btn primary" id="taskAddBtn">＋ 任务</button>
         </div>
       </div>
@@ -168,7 +168,7 @@
           <h3>今日日志</h3>
           <div style="display:flex;align-items:center;gap:8px">
             <span id="logDate"></span>
-            <button class="mic-mini" id="reportVoiceBtn" title="语音录入">🎤</button>
+            <button class="mic-mini" id="reportVoiceBtn" data-voice-btn title="语音录入">🎤</button>
           </div>
         </div>
         <textarea id="logInput" rows="4" placeholder="继续追加今日工作：上午完成了什么，下午解决了什么…随时录入，最后一键生成本日总结。"></textarea>
@@ -222,7 +222,7 @@
           <p class="mod-desc">捕捉一闪而过的念头</p>
         </div>
         <div class="mod-actions">
-          <button class="btn ghost" id="ideaVoiceBtn">🎤 语音</button>
+          <button class="btn ghost" id="ideaVoiceBtn" data-voice-btn>🎤 语音</button>
         </div>
       </div>
 
@@ -316,6 +316,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn ghost" id="newsModalClose2">收起</button>
+      <a class="btn primary hidden" id="newsModalOpen" href="#" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a>
     </div>
   </div>
 </div>
@@ -330,7 +331,7 @@
     <div class="modal-body">
       <label class="field">
         <span>任务标题 *</span>
-        <input id="tmTitle" placeholder="例如：完成产品需求文档" maxlength="60">
+        <input id="tmTitle" placeholder="例如：完成产品需求文档" maxlength="60" x-webkit-speech>
       </label>
       <div class="field">
         <span>子任务（可选，回车添加）</span>

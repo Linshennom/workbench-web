@@ -1,5 +1,5 @@
 /* Service Worker - offline cache for the Workbench PWA */
-const CACHE = 'workbench-v4';
+const CACHE = 'workbench-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -29,6 +29,20 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   // Only handle same-origin
   if(url.origin !== location.origin) return;
+  // 数据快照（data/）走「网络优先」，保证每次都能拉到最新生成的财经/游戏资讯；
+  // 离线时回退到缓存副本，避免空白。
+  if(url.pathname.includes('/data/')){
+    e.respondWith(
+      fetch(e.request).then(resp=>{
+        if(e.request.method==='GET' && resp.status===200){
+          const clone=resp.clone();
+          caches.open(CACHE).then(c=>c.put(e.request, clone));
+        }
+        return resp;
+      }).catch(()=> caches.match(e.request))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(cached => {
       if(cached) return cached;

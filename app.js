@@ -45,199 +45,271 @@ const State = {
 /* =============================================================
    模块一：最新资讯
    ============================================================= */
+/* 分类：全部为浏览器可直连的真实数据源（CORS 已开放、无需 API Key） */
 const NewsCategories = [
-  {id:'daily',name:'每日热点',icon:'◎'},
-  {id:'fin',  name:'财经',icon:'¥'},
-  {id:'game', name:'游戏',icon:'◆'},
-  {id:'ai',   name:'AI前沿',icon:'✦'},
-  {id:'uad',  name:'抖音/小红书',icon:'◈'},
+  {id:'daily', name:'每日热点', icon:'◎', src:'sixty', path:'/60s',        label:'60 秒读世界'},
+  {id:'ai',    name:'AI 前沿',  icon:'✦', src:'aihot', path:'/items?mode=selected&window=24h&limit=20', label:'AI HOT'},
+  {id:'weibo', name:'微博热搜', icon:'❂', src:'sixty', path:'/weibo',      label:'微博'},
+  {id:'zhihu', name:'知乎热榜', icon:'◆', src:'sixty', path:'/zhihu',      label:'知乎'},
+  {id:'douyin',name:'抖音热榜', icon:'◈', src:'sixty', path:'/douyin',     label:'抖音'},
+  {id:'baidu', name:'百度热搜', icon:'❖', src:'sixty', path:'/baidu/hot',  label:'百度'},
+  {id:'game',    name:'游戏资讯', icon:'🎮', src:'local', file:'data/game_news.json',    label:'游戏媒体'},
+  {id:'finance', name:'财经资讯', icon:'📈', src:'local', file:'data/finance_news.json', label:'财经要闻'},
 ];
-const NewsPool = {
-  daily:[
-    {t:'AI 助手正加速渗透职场日常，效率工具成新增长极',d:'从文档处理到数据分析，生成式AI正重构白领工作流。',tag:'要闻'},
-    {t:'多地发布「人工智能+」行动政策，聚焦制造与民生场景落地',d:'政策明确培育行业大模型应用标杆。',tag:'政策'},
-    {t:'国民级应用完成新一轮架构升级，端侧智能成体验核心',d:'新版本主打流畅与主动服务，用户活跃度回升。',tag:'科技'},
-    {t:'今晨财经观察：消费与科技板块情绪回暖',d:'分析师提示关注业绩确定性主线。',tag:'财经'},
-    {t:'新一代移动芯片发布，能效比大幅提升引业界热议',d:'端侧大模型运行成为标配能力。',tag:'硬件'},
-    {t:'国家图书馆上线数字人文平台，古籍资源开放共享',d:'借助 AI 实现古籍自动识别与标点断句。',tag:'文化'},
-    {t:'多国上调本年度经济增长预期，全球贸易稳步修复',d:'机构预计制造业与服务出口保持韧性。',tag:'国际'},
-    {t:'新型显示技术落地消费终端，国产供应链协同提速',d:'柔性屏与光学方案成本持续下探。',tag:'产业'},
-    {t:'多地启动新一轮消费补贴，家电与数码迎来焕新潮',d:'以旧换新政策加码，释放置换需求。',tag:'民生'},
-    {t:'暑期档影视综齐开花，长短视频平台内容供给回暖',d:'爆款剧集与综艺带动会员与广告双增。',tag:'文娱'},
-    {t:'城市更新进入新阶段，「微改造」激活老街区活力',d:'小而美的社区营造成为本轮关键词。',tag:'城市'},
-    {t:'多所高校开设人工智能通识课，素养教育向下延伸',d:'AI 素养被纳入培养方案核心模块。',tag:'教育'},
-    {t:'新能源车渗透率再攀新高，智能座舱成差异化焦点',d:'软硬件协同定义新卖点。',tag:'汽车'},
-  ],
-  fin:[
-    {t:'两市开盘温和走高，科技成长风格占优',d:'北向资金净流入，AI算力方向获关注。',tag:'A股'},
-    {t:'央行开展公开市场操作，维护流动性合理充裕',d:'机构解读：货币政策延续稳健取向。',tag:'宏观'},
-    {t:'多只 AI 主题 ETF 份额持续增长，机构加码布局算力',d:'头部私募调研显示对产业趋势关注度提升。',tag:'基金'},
-    {t:'人民币汇率保持基本稳定，双向波动特征明显',d:'基本面支撑充足，无需过度担忧单边走势。',tag:'汇市'},
-    {t:'黄金延续强势，避险与央行购金需求共同支撑',d:'金价创阶段新高，关注通胀路径。',tag:'大宗'},
-    {t:'中报季收官：超六成公司净利增长，盈利质量改善',d:'高端制造与消费复苏方向表现突出。',tag:'中报'},
-    {t:'北向资金连续多日净流入，外资配置A股意愿回升',d:'估值性价比与盈利修复成主要逻辑。',tag:'资金'},
-    {t:'新一批创新药出海授权落地，License-out再掀热潮',d:'国产创新药全球价值获重新定价。',tag:'医药'},
-    {t:'债市维持震荡，机构建议关注票息策略',d:'长端利率下行动能趋缓。',tag:'固收'},
-    {t:'机构展望下半年：科技与高股息均衡配置成共识',d:'风格轮动加快，哑铃策略受青睐。',tag:'策略'},
-    {t:'储能板块景气延续，工商业与户用需求双升',d:'电芯价格回落带动装机放量。',tag:'新能源'},
-    {t:'半导体设备国产化率提升，订单能见度改善',d:'晶圆厂扩产带动采购回暖。',tag:'半导体'},
-    {t:'白酒动销进入淡季去库阶段，批价企稳信号初现',d:'渠道库存回落至合理区间。',tag:'消费'},
-    {t:'港交所优化上市流程，特专科技企业融资更便利',d:'制度创新吸引更多硬科技登陆。',tag:'港股'},
-    {t:'央行报告：加大逆周期调节，政策仍有空间',d:'市场对后续宽松预期保持温和。',tag:'政策'},
-  ],
-  game:[
-    {t:'现象级大作新赛季上线，首日同时在线人数再创新高',d:'玩法更新引爆玩家热情，股价受提振。',tag:'新品'},
-    {t:'国产开放世界新游公开实机演示，画面表现获好评',d:'自研引擎技术进一步成熟。',tag:'国产'},
-    {t:'热门手游周年庆开启，限定活动与福利集中放送',d:'流水预期升温。',tag:'手游'},
-    {t:'电竞季后赛落幕，黑马战队完成逆袭夺冠',d:'总决赛收视创赛季新高。',tag:'电竞'},
-    {t:'云游戏进入规模化阶段，订阅服务竞争白热化',d:'延迟体验成关键，多家平台加码投入。',tag:'云游戏'},
-    {t:'独立游戏年度评选启动，多款口碑佳作入围',d:'鼓励创新表达，生态持续多元。',tag:'独立'},
-    {t:'国产单机大作全球口碑发酵，海外销量占比创新高',d:'文化出海与买断制模式获验证。',tag:'单机'},
-    {t:'AI NPC技术亮相，游戏角色实现千人千面自由对话',d:'大模型接入带来玩法范式变化。',tag:'AI'},
-    {t:'主机平台迎来折扣季，经典重制与复刻扎堆',d:'怀旧经济持续拉动销量。',tag:'主机'},
-    {t:'休闲游戏出海报告：小游戏成增长最快品类',d:'超休闲与混合玩法厂商集体加码。',tag:'出海'},
-    {t:'电竞亚运项目公布赛程，国家队集训名单出炉',d:'入选选手与俱乐部均受关注。',tag:'电竞'},
-    {t:'多款开放世界手游同日开启测试，暑期档竞争激烈',d:'大厂集中上档，赛道再度拥挤。',tag:'新游'},
-    {t:'游戏引擎更新发布，跨平台创作门槛进一步降低',d:'UGC 与AIGC 工具链持续补强。',tag:'引擎'},
-    {t:'主机独占作品宣布登录PC，玩家社区反响热烈',d:'跨平台策略成为行业新常态。',tag:'平台'},
-    {t:'国产二次元新游流水登顶，日系市场反向破圈',d:'文化表达与本地化运营缺一不可。',tag:'出海'},
-  ],
-  ai:[
-    {t:'新一代推理模型发布，数学与代码能力刷新基准',d:'在复杂推理与长上下文任务上表现突出。',tag:'大模型'},
-    {t:'国产大模型竞技场榜单更新，中文能力对标国际一流',d:'开源模型登榜，推理成本下探。',tag:'国产'},
-    {t:'多模态 Agent 突破：可自主规划并操作软件完成复杂任务',d:'被视为通向通用助手的里程碑。',tag:'Agent'},
-    {t:'端侧 AI 芯片出货放量，手机电脑本地推理普及',d:'隐私与离线需求驱动算力向端侧迁移。',tag:'端侧'},
-    {t:'AI 安全对齐新论文：提出可扩展监督与可解释性框架',d:'业界呼吁能力跃升同时守住安全底线。',tag:'对齐'},
-    {t:'AI 编程助手普及率再升，开发者人效报告出炉',d:'代码审查与重构效率提升最明显。',tag:'编程'},
-    {t:'开源模型迎来爆发，社区贡献与生态治理成焦点',d:'开放权重模型推动应用层繁荣。',tag:'开源'},
-    {t:'具身智能升温，人形机器人进厂实训加速',d:'多模态与强化学习驱动操作泛化。',tag:'具身智能'},
-    {t:'AI医疗影像获监管新进展，三类证落地提速',d:'辅助诊断进入临床放量窗口。',tag:'医疗AI'},
-    {t:'企业级AI治理框架出台，数据安全与合规成刚需',d:'算法备案与责任边界被进一步明确。',tag:'治理'},
-    {t:'多模态视频生成模型再升级，可控性与时长大幅改善',d:'影视预演与营销场景率先落地。',tag:'文生视频'},
-    {t:'语音交互迎来范式革新，实时同传接近母语级',d:'跨语言沟通成本被大幅拉低。',tag:'语音'},
-    {t:'AI 硬件新品迭出，AI眼镜与耳机进入出货爬坡期',d:'随身智能体形态走向消费市场。',tag:'硬件'},
-    {t:'推理成本持续下探，小模型在垂直场景强势崛起',d:'蒸馏与量化技术成普及关键。',tag:'小模型'},
-    {t:'多智能体协作研究升温，复杂任务自动拆解成为可能',d:'系统工程化仍是主要挑战。',tag:'多智能体'},
-  ],
-  uad:[
-    {t:'小红书公布生活方式趋势关键词，户外与健康生活热度攀升',d:'笔记社区氛围持续强化。',tag:'小红书'},
-    {t:'抖音短剧再出新爆款，单集播放破亿引行业关注',d:'品牌定制短剧成营销新宠。',tag:'抖音'},
-    {t:'直播电商年中复盘：低价之外，体验与信任成新关键词',d:'退货率下降成共同目标。',tag:'电商'},
-    {t:'爆款笔记方法论：情绪价值与利他信息并行成传播密码',d:'真实感仍是流量核心。',tag:'运营'},
-    {t:'AI 数字人主播批量进场，中小商家迎来内容降本',d:'虚拟形象带货成本仅为真人十分之一。',tag:'AI应用'},
-    {t:'短视频平台加码本地生活，探店内容带火小众目的地',d:'按视频打卡成为出行新方式。',tag:'本地生活'},
-    {t:'小红书发布「反虚假种草」新规，治理升级保障体验',d:'品牌合作笔记需明确标注广告属性。',tag:'小红书'},
-    {t:'抖音升级创作者分成计划，优质内容收益更高',d:'中长尾作者迎来更多变现机会。',tag:'抖音'},
-    {t:'笔记搜索流量占比上升，内容SEO成新运营重点',d:'用户把平台当搜索引擎用的趋势更明显。',tag:'运营'},
-    {t:'县域消费崛起，本地生活商家迎来数字化红利',d:'短视频+地图联动带动到店转化。',tag:'本地生活'},
-    {t:'「中式美学」笔记爆火，传统文化审美回归主流',d:'非遗与新中式穿搭成流量密码。',tag:'小红书'},
-    {t:'车载场景成内容新蓝海，通勤路上播客与短剧受宠',d:'车企与内容平台合作加深。',tag:'内容'},
-    {t:'虚拟主播年中报告：电竞解说与助眠赛道增长明显',d:'虚拟偶像商业化路径日渐成熟。',tag:'虚拟主播'},
-    {t:'Vlog博主转型职业化，MCN 从流量转向精细化运营',d:'品牌短代与本地化IP 需求旺盛。',tag:'创作者'},
-    {t:'高颜值美食内容风潮再起，「嘴替」视频获高互动',d:'情绪共鸣仍是评论区主引擎。',tag:'抖音'},
-  ],
-};
+const API_BASE = { sixty:'https://60s.viki.moe/v2', aihot:'https://aihot.virxact.com/api/v1' };
+
+/* ---- 格式化工具 ---- */
+function fmtHeat(n){
+  if(n==null||n==='') return '';
+  n=Number(n); if(!isFinite(n)) return String(n);
+  if(n>=1e8) return (n/1e8).toFixed(1)+'亿';
+  if(n>=1e4) return (n/1e4).toFixed(1)+'万';
+  return String(n);
+}
+function fmtAgo(iso){
+  if(!iso) return '';
+  const t=new Date(iso).getTime(); if(!t) return '';
+  const d=Date.now()-t;
+  if(d<3600000) return Math.max(1,Math.floor(d/60000))+' 分钟前';
+  if(d<86400000) return Math.floor(d/3600000)+' 小时前';
+  return Math.floor(d/86400000)+' 天前';
+}
+function fmtMinsAgo(at){
+  if(!at) return '';
+  const m=Math.round((Date.now()-at)/60000);
+  if(m<1) return '刚刚更新';
+  if(m<60) return m+' 分钟前更新';
+  return Math.floor(m/60)+' 小时前更新';
+}
+
+/* ---- 归一化：把不同数据源统一成 {t,d,tag,url,heat,time,src} ---- */
+const SIXTY_NAME={weibo:'微博热搜', zhihu:'知乎热榜', douyin:'抖音热榜', baidu:'百度热搜'};
+function normSixty(catId, payload){
+  const d=payload&&payload.data;
+  if(!d) return [];
+  if(catId==='daily'){
+    return (d.news||[]).map(t=>({
+      t, d:'', tag:'要闻', url:d.link||'', heat:'', time:d.date||'', src:'每日 60 秒'
+    }));
+  }
+  const list=Array.isArray(d)? d : (d.list||d.items||[]);
+  return list.map(it=>({
+    t: it.title||'',
+    d: it.detail||it.desc||it.excerpt||'',
+    tag: SIXTY_NAME[catId]||'热榜',
+    url: it.link||it.url||'',
+    heat: it.hot_value!=null? fmtHeat(it.hot_value) : (it.hot!=null? fmtHeat(it.hot) : ''),
+    time: '',
+    src: SIXTY_NAME[catId]||'热榜',
+  })).filter(x=>x.t);
+}
+const AI_CAT={ 'ai-models':'模型发布', 'ai-products':'产品工具', 'industry':'行业动态', 'paper':'论文', 'tip':'观点技巧' };
+function normAihot(payload){
+  const items=(payload&&payload.items)||[];
+  return items.map(it=>({
+    t: it.title||'',
+    d: it.summary||'',
+    tag: AI_CAT[it.category]||'AI',
+    url: (it.links&&it.links.original)||(it.links&&it.links.aihot)||'',
+    heat: it.score!=null? '热度 '+it.score : '',
+    time: fmtAgo(it.publishedAt||it.discoveredAt),
+    src: (it.source&&it.source.name)||'AI HOT',
+  }));
+}
+
+/* ---- 带超时的 JSON 拉取 ---- */
+async function fetchJSON(url, ms=12000){
+  const ctl=new AbortController();
+  const timer=setTimeout(()=>ctl.abort(), ms);
+  try{
+    const r=await fetch(url,{signal:ctl.signal, headers:{Accept:'application/json'}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }finally{ clearTimeout(timer); }
+}
+
+/* ---- 缓存：内存优先，localStorage 兜底离线 ---- */
+const NEWS_TTL=5*60*1000;
+const newsCache={};
+function newsCacheKey(id){ return 'wb_news_'+id; }
+function readNewsCache(id){
+  const hit=newsCache[id];
+  if(hit && Date.now()-hit.at < NEWS_TTL) return hit;
+  try{
+    const raw=localStorage.getItem(newsCacheKey(id));
+    if(raw){
+      const o=JSON.parse(raw);
+      if(o && o.items && Date.now()-o.at < NEWS_TTL*12){ newsCache[id]=o; return o; }
+    }
+  }catch(e){}
+  return hit||null;
+}
+function writeNewsCache(id, items){
+  const o={at:Date.now(), items};
+  newsCache[id]=o;
+  try{ localStorage.setItem(newsCacheKey(id), JSON.stringify(o)); }catch(e){}
+}
+async function loadCategory(catId, force){
+  const cfg=NewsCategories.find(c=>c.id===catId);
+  if(!cfg) throw new Error('未知分类');
+  if(!force){
+    const c=readNewsCache(catId);
+    if(c) return {items:c.items, at:c.at, stale:Date.now()-c.at>=NEWS_TTL};
+  }
+  let items;
+  if(cfg.src==='local'){
+    const payload=await fetchJSON(cfg.file);
+    items=(payload&&payload.items)||[];
+  }else{
+    const payload=await fetchJSON(API_BASE[cfg.src]+cfg.path);
+    items = cfg.src==='aihot'? normAihot(payload) : normSixty(catId, payload);
+  }
+  if(!items.length) throw new Error('数据源暂时没有内容');
+  writeNewsCache(catId, items);
+  return {items, at:Date.now(), stale:false};
+}
+
+/* ---- 分类加载状态机 ---- */
+const newsState={};
+const newsInflight={};
+function ensureCategory(catId, force){
+  if(!force && newsState[catId] && (newsState[catId].items || newsState[catId].error)) return Promise.resolve();
+  if(newsInflight[catId]) return newsInflight[catId];
+  newsState[catId]=Object.assign({}, newsState[catId], {loading:true, error:null});
+  renderNewsTabs();
+  if(State.newsCat===catId) renderNews();
+  const p=(async()=>{
+    try{
+      const r=await loadCategory(catId, force);
+      newsState[catId]={items:r.items, at:r.at, stale:r.stale, loading:false, error:null};
+    }catch(e){
+      newsState[catId]=Object.assign({}, newsState[catId], {loading:false, error:e.message||'网络异常'});
+    }finally{
+      delete newsInflight[catId];
+      renderNewsTabs();
+      if(State.newsCat===catId) renderNews();
+    }
+  })();
+  newsInflight[catId]=p;
+  return p;
+}
 
 function renderNewsTabs(){
-  const tabs = $('#newsTabs'); tabs.innerHTML='';
+  const tabs=$('#newsTabs'); tabs.innerHTML='';
   NewsCategories.forEach(c=>{
+    const st=newsState[c.id];
+    const n=st&&st.items? st.items.length : 0;
     const b=document.createElement('button');
     b.className='cat-tab'+(c.id===State.newsCat?' active':'');
     b.dataset.cat=c.id;
-    b.innerHTML=`<span>${c.icon} ${c.name}</span><span class="cat-count">${NewsPool[c.id].length}</span>`;
-    b.onclick=()=>{ State.newsCat=c.id; renderNewsTabs(); renderNews(); };
+    b.innerHTML=`<span>${c.icon} ${c.name}</span><span class="cat-count">${st&&st.loading?'…':(st&&st.error?'!':n)}</span>`;
+    b.onclick=()=>{ State.newsCat=c.id; renderNewsTabs(); renderNews(); ensureCategory(c.id); };
     tabs.appendChild(b);
   });
 }
+
 function renderNews(){
   const cat=State.newsCat;
-  const catName=NewsCategories.find(c=>c.id===cat).name;
-  $('#newsBrief').innerHTML=`<b>${catName}</b><span>${todayStr()} · ${(State.newsData[cat]||[]).length} 条热点 · 点击可看全文</span>`;
-  const list=$('#newsList'); list.innerHTML='';
-  (State.newsData[cat]||[]).forEach((n,i)=>{
-    const heat=35+Math.floor(Math.random()*64);
+  const cfg=NewsCategories.find(c=>c.id===cat)||NewsCategories[0];
+  const st=newsState[cat];
+  const list=$('#newsList');
+  const brief=$('#newsBrief');
+  list.innerHTML='';
+  if(!st || st.loading){
+    brief.innerHTML=`<b>${esc(cfg.name)}</b><span>正在从 ${esc(cfg.label)} 拉取实时数据…</span>`;
+    list.innerHTML=Array.from({length:5}).map(()=>
+      `<div class="news-card sk-card"><div class="sk-line w1"></div><div class="sk-line w2"></div></div>`).join('');
+    return;
+  }
+  if(st.error){
+    brief.innerHTML=`<b>${esc(cfg.name)}</b><span class="warn-text">拉取失败：${esc(st.error)}</span>`;
+    list.innerHTML=`<div class="news-empty"><div class="ne-icon">📡</div><p>没能连上 ${esc(cfg.label)}</p><span>检查网络后点「刷新」重试</span></div>`;
+    return;
+  }
+  const items=st.items||[];
+  brief.innerHTML=`<b>${esc(cfg.name)}</b><span>${esc(cfg.label)} · ${items.length} 条 · ${st.stale?'缓存':'实时'} · ${esc(fmtMinsAgo(st.at))}</span>`;
+  if(!items.length){
+    list.innerHTML=`<div class="news-empty"><div class="ne-icon">🗒</div><p>暂无内容</p><span>该源当前没有返回条目</span></div>`;
+    return;
+  }
+  items.forEach((n,i)=>{
     const card=document.createElement('div');
     card.className='news-card';
     card.innerHTML=`
-      <div class="news-rank">${i<3?'0'+(i+1):i+1}</div>
+      <div class="news-rank">${i<9?'0'+(i+1):(i+1)}</div>
       <div>
         <div class="news-meta">
           ${i===0?'<span class="news-hot">热</span>':''}
-          <span class="news-tag">${esc(n.tag)}</span>
-          <span class="news-heat">热度 ${heat}万</span>
+          <span class="news-tag">${esc(n.tag||'')}</span>
+          ${n.heat?`<span class="news-heat">${esc(n.heat)}</span>`:''}
+          ${n.time?`<span class="news-time">${esc(n.time)}</span>`:''}
         </div>
         <div class="news-title">${esc(n.t)}</div>
-        <div class="news-desc">${esc(n.d)}</div>
-        <div class="news-more">查看全文 · ${i<3?'top':'news'} ↗</div>
+        ${n.d?`<div class="news-desc">${esc(n.d)}</div>`:''}
+        <div class="news-more">${n.url?'阅读原文 ↗':esc(n.src||'')}</div>
       </div>`;
     card.onclick=()=>openNewsDetail(cat,n,i+1);
     list.appendChild(card);
   });
 }
-/* 组装一条资讯的完整正文（在标题/摘要基础上展开成多段简报） */
-function buildArticleBody(cat,n,rank){
-  const openers=[
-    `刚刚，${n.tag}领域又迎来新进展。`,
-    `今日关注到一条值得记录的动态：`,
-    `围绕「${n.t}」，多方信息正在汇集。`,
-    `这是${n.tag}板块近期的焦点事件之一。`,
-  ];
-  const expansions=[
-    `从产业视角看，${n.d}这一信号背后是行业供需与预期的再平衡。相关链条上的参与方正在据此调整节奏，把更多资源投向更确定的方向。`,
-    `市场普遍认为，这轮变化的根本驱动力来自技术渗透与需求升级的交汇。短期或仍有波动，但中长期的结构性机会已被越来越多观察者认可。`,
-    `值得留意的是，周边配套与政策环境也在同步跟进，为这一趋势提供了土壤。对普通从业者和用户而言，提前建立判断框架比追逐短期热度更有价值。`,
-    `多位受访业内人士表示，当前仍处于早期布局阶段，真正的变量取决于落地效率与真实反馈。接下来一段时间的验证数据，将决定话题能否从热点沉淀为常态。`,
-  ];
-  const tagTail={
-    daily:'作为当日要闻中的代表性事件，它一定程度反映了当下公共话题的关注重心。',
-    fin:'对本条财经线索，投资者仍需结合基本面与估值审慎评估，不宜仅凭短期情绪作判断。',
-    game:'对玩家与厂商而言，这条动态都意味着内容供给与体验边界的又一次试探。',
-    ai:'该进展再次印证，AI 正在从能力演示走向规模化的工程落地。',
-    uad:'在内容平台生态里，这样的动向往往预示新一轮创作与流量的再分配。',
-  };
-  const paras=[];
-  paras.push(`${n.d}`);
-  paras.push(openers[rank%openers.length]);
-  expansions.forEach((e,idx)=>{ if(idx<2) paras.push(e); });
-  paras.push(`总体来看，这条资讯以「${n.t}」为线索，${(tagTail[cat]||tagTail.daily)}以上内容由智能简报引擎基于公开资讯综合整理，仅供快速浏览参考。`);
-  return paras.join('\n\n');
-}
-const NEWS_SRC={
-  daily:[{n:'新华社',u:'news.cn'},{n:'人民日报',u:'people.com.cn'},{n:'央视新闻',u:'cctv.com'}],
-  fin:[{n:'第一财经',u:'yicai.com'},{n:'财联社',u:'cls.cn'},{n:'证券时报',u:'stcn.com'}],
-  game:[{n:'游戏葡萄',u:'youxiputao.com'},{n:'触乐',u:'chuapp.com'},{n:'游戏茶馆',u:'youxichaguan.com'}],
-  ai:[{n:'量子位',u:'qbitai.com'},{n:'机器之心',u:'jiqizhixin.com'},{n:'新智元',u:'aiera.com'}],
-  uad:[{n:'晚点LatePost',u:'latepost.com'},{n:'36氪',u:'36kr.com'},{n:'刺猬公社',u:'ciweigongshe.com'}],
-};
+
+/* 详情：展示真实摘要 + 原文跳转，不再编造正文 */
 function openNewsDetail(cat,n,rank){
-  const body=buildArticleBody(cat,n,rank);
-  const srcList=NEWS_SRC[cat]||NEWS_SRC.daily;
-  const src=srcList[(n.t.length)%srcList.length];
-  const catName=NewsCategories.find(c=>c.id===cat).name;
-  const heat=40+Math.floor(Math.random()*60);
-  const d=new Date(); const time=`${todayStr()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const cfg=NewsCategories.find(c=>c.id===cat)||NewsCategories[0];
   $('#newsTitle').textContent=n.t;
   $('#newsDetailMeta').innerHTML=
-    `<span class="nd-tag">${esc(n.tag)}</span>
-     <span>${esc(src.n)} · ${esc(src.u)}</span>
-     <span>${time}</span>`;
-  $('#newsDetailHeat').textContent=`热度 ${heat}万`;
-  $('#newsDetailBody').innerHTML=`<p>${body.split('\n\n').map(p=>esc(p)).join('</p><p>')}</p>`;
+    `<span class="nd-tag">${esc(n.tag||'')}</span>
+     <span>${esc(n.src||cfg.label)}</span>
+     ${n.time?`<span>${esc(n.time)}</span>`:''}
+     <span>第 ${rank} 位</span>`;
+  $('#newsDetailHeat').textContent=n.heat||'';
+  const paras=[];
+  if(n.d) paras.push(n.d);
+  paras.push(n.url
+    ? '以上为该条资讯的原始摘要。完整报道请点击下方「阅读原文」跳转至来源页面查看。'
+    : '该榜单来源仅提供标题，暂无更多正文。可在原平台搜索该标题查看完整内容。');
+  $('#newsDetailBody').innerHTML=paras.map(p=>`<p>${esc(p)}</p>`).join('');
+  const open=$('#newsModalOpen');
+  if(n.url){ open.href=n.url; open.classList.remove('hidden'); }
+  else open.classList.add('hidden');
   $('#newsModal').classList.remove('hidden');
 }
 function closeNewsDetail(){ $('#newsModal').classList.add('hidden'); }
-function freshNews(randomize){
-  const data={};
-  Object.keys(NewsPool).forEach(k=>{
-    data[k]=[...NewsPool[k]];
-    if(randomize) data[k]=data[k].sort(()=>Math.random()-.5);
-  });
-  State.newsData=data;
+
+async function doNewsRefresh(from){
+  const btn=$('#newsRefreshBtn');
+  const fab=$('#newsFab');
+  btn.classList.add('spinning'); btn.disabled=true;
+  fab.classList.add('spinning'); fab.disabled=true;
+  $('#newsSyncState').textContent='刷新中…';
+  const cur=State.newsCat;
+  try{
+    await ensureCategory(cur, true);
+    const st=newsState[cur];
+    if(st && st.error){
+      $('#newsSyncState').textContent='刷新失败，可重试';
+      toast('刷新失败：'+st.error,'warn');
+    }else if(st){
+      $('#newsSyncState').textContent='已更新 '+new Date().toTimeString().slice(0,5);
+      toast('已拉取 '+st.items.length+' 条实时资讯');
+    }
+  }catch(e){
+    $('#newsSyncState').textContent='刷新失败';
+    toast('刷新失败，请检查网络','warn');
+  }finally{
+    btn.classList.remove('spinning'); btn.disabled=false;
+    fab.classList.remove('spinning'); fab.disabled=false;
+    setTimeout(()=>{ $('#newsSyncState').textContent='下拉可刷新实时热点'; },4000);
+  }
+  /* 后台静默预取其余分类，切换时即时可见 */
+  NewsCategories.forEach(c=>{ if(c.id!==cur) ensureCategory(c.id); });
 }
+
 function initNews(){
-  freshNews(true);
   renderNewsTabs();
   renderNews();
+  ensureCategory(State.newsCat);
+  NewsCategories.forEach(c=>{ if(c.id!==State.newsCat) setTimeout(()=>ensureCategory(c.id), 500); });
   $('#newsRefreshBtn').onclick=()=>doNewsRefresh('top');
   const fab=$('#newsFab');
   fab.onclick=()=>doNewsRefresh('fab');
@@ -253,22 +325,6 @@ function initNews(){
   $('#newsModalClose').onclick=closeNewsDetail;
   $('#newsModalClose2').onclick=closeNewsDetail;
   $('#newsModal').addEventListener('click',e=>{ if(e.target.id==='newsModal') closeNewsDetail(); });
-}
-function doNewsRefresh(from){
-  const btn=$('#newsRefreshBtn');
-  const fab=$('#newsFab');
-  btn.classList.add('spinning'); btn.disabled=true;
-  fab.classList.add('spinning'); fab.disabled=true;
-  $('#newsSyncState').textContent='刷新中…';
-  setTimeout(()=>{
-    freshNews(true);
-    renderNewsTabs(); renderNews();
-    btn.classList.remove('spinning'); btn.disabled=false;
-    fab.classList.remove('spinning'); fab.disabled=false;
-    $('#newsSyncState').textContent='已更新 '+new Date().toTimeString().slice(0,5);
-    toast('热点已刷新');
-    setTimeout(()=>$('#newsSyncState').textContent='点击刷新加载热点',3000);
-  },500);
 }
 
 /* =============================================================
@@ -918,24 +974,43 @@ function initIdeaModule(){
 /* =============================================================
    语音输入
    ============================================================= */
-let recognition=null;
+let recognition=null;        // 当前活动实例
+let voiceActive=false;       // 防止重复 start 导致 "already started"
+let voiceCtx=null;
+let voiceState='idle';       // idle | listening | result
+
+/* 当前环境是否支持语音识别 */
+function voiceSupported(){
+  return !!(window.SpeechRecognition||window.webkitSpeechRecognition);
+}
+/* 是否以「添加到主屏幕」的独立 App 形态运行（iOS 独立模式没有 Web Speech） */
+function isStandalonePWA(){
+  return (window.navigator.standalone===true) ||
+         (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+/* 不支持时的引导文案 */
+function voiceSupportHint(){
+  if(voiceSupported()) return '';
+  if(isStandalonePWA()){
+    return '安装版(iOS)暂不支持语音识别，请点右上角「在浏览器中打开」，或直接用键盘输入。';
+  }
+  if(!window.isSecureContext){
+    return '语音识别需要 HTTPS 安全连接，当前本地预览无法调用，部署后或改用键盘输入。';
+  }
+  return '当前浏览器不支持语音识别，请用键盘输入(Safari/Chrome/Edge 可用)。';
+}
 function getRecognition(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ toast('当前浏览器不支持语音识别，建议使用 Safari/Chrome/Edge','err'); return null; }
-  if(recognition) return recognition;
-  recognition=new SR();
-  recognition.lang='zh-CN';
-  recognition.interimResults=false;
-  recognition.continuous=false;
-  recognition.maxAlternatives=1;
-  return recognition;
+  if(!SR){ toast(voiceSupportHint(),'err'); return null; }
+  return new SR();
 }
-let voiceCtx=null;
-let voiceState='idle'; // idle | listening | result
 /* 开始语音输入 */
 function startVoice(ctx){
-  const rec=getRecognition(); if(!rec) return;
-  voiceCtx=ctx; voiceState='listening';
+  if(voiceActive) return;                         // 已在聆听中，避免重复触发
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ toast(voiceSupportHint(),'err'); return; }
+  const rec=new SR();                            // 每次新建实例，规避 onend 不复活/重复 start 问题
+  recognition=rec; voiceActive=true; voiceCtx=ctx; voiceState='listening';
   closeVoiceModal();
   const pill=$('#listenPill');
   pill.classList.remove('hidden');
@@ -947,6 +1022,8 @@ function startVoice(ctx){
   };
   const ph=phrases[ctx]||phrases.idea;
   $('#listenPillText').textContent=ph[0];
+  rec.lang='zh-CN';
+  rec.interimResults=false; rec.continuous=false; rec.maxAlternatives=1;
   rec.onstart=()=>{ $('#listenPillText').textContent=ph[1]; };
   rec.onresult=e=>{
     const parts=[];
@@ -955,25 +1032,35 @@ function startVoice(ctx){
     if(text){ voiceState='result'; handleVoiceResult(ctx,text); }
   };
   rec.onerror=ev=>{
-    pill.classList.add('hidden');
-    if(ev.error==='not-allowed') toast('麦克风权限被拒绝，请在浏览器中允许','err');
+    pill.classList.add('hidden'); voiceActive=false; voiceState='idle';
+    if(ev.error==='not-allowed') toast('麦克风权限被拒绝，请在浏览器设置中允许','err');
     else if(ev.error==='no-speech') toast('未检测到声音，请靠近麦克风再说一次','warn');
+    else if(ev.error==='network') toast('语音服务连接失败，请检查网络或改用键盘','warn');
+    else if(ev.error==='aborted'){ /* 手动停止，忽略 */ }
     else toast('语音识别出错：'+ev.error,'err');
-    voiceState='idle';
   };
-  rec.onend=()=>{
-    pill.classList.add('hidden');
-    if(voiceState==='result'){ /* 已在结果回调里弹出确认 */ }
-    voiceState='idle';
-  };
+  rec.onend=()=>{ pill.classList.add('hidden'); voiceActive=false; voiceState='idle'; };
   try{ rec.start(); }
-  catch(e){ toast('语音已占用，请稍后再试','warn'); pill.classList.add('hidden'); voiceState='idle'; }
+  catch(e){
+    toast('语音已占用，请稍后再试','warn');
+    pill.classList.add('hidden'); voiceActive=false; voiceState='idle';
+  }
 }
 /* 手动停止语音（也触发识别结束） */
 function stopVoice(){
   const rec=recognition;
   if(rec){ try{ rec.stop(); }catch(e){} }
   $('#listenPill').classList.add('hidden');
+}
+/* 初始化时：若不支持语音识别，禁用按钮并给出引导，避免「点了没反应」 */
+function refreshVoiceButtons(){
+  if(voiceSupported()) return;
+  const hint=voiceSupportHint();
+  document.querySelectorAll('[data-voice-btn]').forEach(b=>{
+    b.classList.add('voice-off');
+    b.title=hint;
+    b.onclick=()=>toast(hint,'err');
+  });
 }
 function handleVoiceResult(ctx,text){
   if(ctx==='task') openTaskConfirm(parseTaskText(text));
@@ -1153,7 +1240,6 @@ function setupPWA(){
 
 function init(){
   load();
-  freshNews(true);
   renderToday();
   // 主题必须在 DOM 渲染前应用
   applyTheme(State.theme);
@@ -1171,6 +1257,8 @@ function init(){
   $('#voiceModal').addEventListener('click',e=>{ if(e.target.id==='voiceModal') closeVoiceModal(); });
   // 助手 banner 语音快速按钮
   $('#quickVoice').onclick=()=>startVoice('task');
+  // 根据环境能力禁用/提示语音按钮（iOS 独立模式、HTTP 预览等）
+  refreshVoiceButtons();
   // 默认模块（按 #hash 或 news）
   const hash=(location.hash||'').replace('#','');
   const target=['news','task','report','idea'].includes(hash)?hash:'news';
