@@ -610,6 +610,35 @@ textarea:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px color-m
 .vm-hint{font-size:11.5px;color:var(--ink-3);line-height:1.6;margin-top:2px}
 
 /* ============================================================
+   资讯分类管理
+   ============================================================ */
+.news-cat-modal{max-width:520px}
+.nc-tip{font-size:12px;color:var(--ink-3);line-height:1.6;margin:0 0 4px}
+.nc-list{display:flex;flex-direction:column;gap:8px}
+.nc-row{
+  display:flex;align-items:center;gap:10px;
+  background:var(--card);border:1px solid var(--card-line);border-radius:12px;
+  padding:10px 12px;animation:pop .18s;
+}
+.nc-move{display:flex;flex-direction:column;gap:3px;flex:none}
+.nc-move button{
+  width:26px;height:18px;border:1px solid var(--card-line);border-radius:6px;
+  background:var(--paper);color:var(--ink-2);font-size:9px;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+}
+.nc-move button:disabled{opacity:.3}
+.nc-move button:not(:disabled):active{border-color:var(--ink)}
+.nc-icon{width:26px;text-align:center;font-size:17px;flex:none}
+.nc-name{flex:1;display:flex;flex-direction:column;min-width:0}
+.nc-name b{font-size:14px;font-weight:700;color:var(--ink)}
+.nc-name span{font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc-switch{width:42px;height:24px;flex:none}
+.nc-switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.nc-switch i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.nc-switch.on{background:var(--teal)}
+.nc-switch.on i{left:20px}
+
+/* ============================================================
    资讯右下角浮动刷新按钮
    ============================================================ */
 .fab{

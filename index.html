@@ -96,7 +96,10 @@
           <h2 class="mod-title">最新资讯</h2>
           <p class="mod-desc" id="newsSyncState">点击刷新加载热点</p>
         </div>
-        <button class="btn primary" id="newsRefreshBtn"><span class="btn-spin">↻</span> 刷新</button>
+        <div class="mod-actions">
+          <button class="btn ghost" id="newsCatBtn" title="选择展示分类并排序">⚙ 分类</button>
+          <button class="btn primary" id="newsRefreshBtn"><span class="btn-spin">↻</span> 刷新</button>
+        </div>
       </div>
 
       <div class="cat-tabs" id="newsTabs"></div>
@@ -317,6 +320,24 @@
     <div class="modal-foot">
       <button class="btn ghost" id="newsModalClose2">收起</button>
       <a class="btn primary hidden" id="newsModalOpen" href="#" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：资讯分类管理 ============ -->
+<div class="modal-mask hidden" id="newsCatModal">
+  <div class="modal news-cat-modal">
+    <div class="modal-head">
+      <h3>资讯分类管理</h3>
+      <button class="modal-x" id="newsCatClose">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="nc-tip">开启/关闭要展示的分类，用 ▲ ▼ 调整顺序（顶部的分类显示在资讯标签最前）。</p>
+      <div class="nc-list" id="newsCatList"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="newsCatReset">恢复默认</button>
+      <button class="btn primary" id="newsCatDone">完成</button>
     </div>
   </div>
 </div>

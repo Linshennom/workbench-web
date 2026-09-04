@@ -30,6 +30,7 @@ const Store = {
 const State = {
   tasks: [],
   newsCat:'daily',
+  newsCats:null,
   newsData:null,
   taskView:'list',
   taskFilter:'all',
@@ -45,8 +46,8 @@ const State = {
 /* =============================================================
    模块一：最新资讯
    ============================================================= */
-/* 分类：全部为浏览器可直连的真实数据源（CORS 已开放、无需 API Key） */
-const NewsCategories = [
+/* 分类主表：全部为浏览器可直连的真实数据源（CORS 已开放、无需 API Key） */
+const NEWS_MASTER = [
   {id:'daily', name:'每日热点', icon:'◎', src:'sixty', path:'/60s',        label:'60 秒读世界'},
   {id:'ai',    name:'AI 前沿',  icon:'✦', src:'aihot', path:'/items?mode=selected&window=24h&limit=20', label:'AI HOT'},
   {id:'weibo', name:'微博热搜', icon:'❂', src:'sixty', path:'/weibo',      label:'微博'},
@@ -57,6 +58,23 @@ const NewsCategories = [
   {id:'finance', name:'财经资讯', icon:'📈', src:'local', file:'data/finance_news.json', label:'财经要闻'},
 ];
 const API_BASE = { sixty:'https://60s.viki.moe/v2', aihot:'https://aihot.virxact.com/api/v1' };
+
+/* 用户自定义的分类展示配置：数组 [{id, enabled}]，顺序即展示顺序 */
+function defaultNewsCats(){
+  return NEWS_MASTER.map(c=>({id:c.id, enabled:true}));
+}
+/* 拼出当前应展示的分类数组（按用户顺序、过滤掉关闭的，并补齐缺失项） */
+function getNewsCats(){
+  let cfg = (State.newsCats && State.newsCats.length) ? State.newsCats.slice() : defaultNewsCats();
+  const ids = cfg.map(x=>x.id);
+  NEWS_MASTER.forEach(c=>{ if(!ids.includes(c.id)) cfg.push({id:c.id, enabled:true}); });
+  return cfg
+    .filter(x=>x.enabled)
+    .map(x=>NEWS_MASTER.find(c=>c.id===x.id))
+    .filter(Boolean);
+}
+/* 按 id 取分类定义（始终从主表查，避免顺序/开关影响） */
+function findCat(id){ return NEWS_MASTER.find(c=>c.id===id) || null; }
 
 /* ---- 格式化工具 ---- */
 function fmtHeat(n){
@@ -150,7 +168,7 @@ function writeNewsCache(id, items){
   try{ localStorage.setItem(newsCacheKey(id), JSON.stringify(o)); }catch(e){}
 }
 async function loadCategory(catId, force){
-  const cfg=NewsCategories.find(c=>c.id===catId);
+  const cfg=findCat(catId);
   if(!cfg) throw new Error('未知分类');
   if(!force){
     const c=readNewsCache(catId);
@@ -196,7 +214,10 @@ function ensureCategory(catId, force){
 
 function renderNewsTabs(){
   const tabs=$('#newsTabs'); tabs.innerHTML='';
-  NewsCategories.forEach(c=>{
+  const cats=getNewsCats();
+  /* 当前激活分类如果被关闭，自动回退到第一个可见分类 */
+  if(!cats.some(c=>c.id===State.newsCat)) State.newsCat = cats.length? cats[0].id : 'daily';
+  cats.forEach(c=>{
     const st=newsState[c.id];
     const n=st&&st.items? st.items.length : 0;
     const b=document.createElement('button');
@@ -210,7 +231,7 @@ function renderNewsTabs(){
 
 function renderNews(){
   const cat=State.newsCat;
-  const cfg=NewsCategories.find(c=>c.id===cat)||NewsCategories[0];
+  const cfg=findCat(cat)||NEWS_MASTER[0];
   const st=newsState[cat];
   const list=$('#newsList');
   const brief=$('#newsBrief');
@@ -255,7 +276,7 @@ function renderNews(){
 
 /* 详情：展示真实摘要 + 原文跳转，不再编造正文 */
 function openNewsDetail(cat,n,rank){
-  const cfg=NewsCategories.find(c=>c.id===cat)||NewsCategories[0];
+  const cfg=findCat(cat)||NEWS_MASTER[0];
   $('#newsTitle').textContent=n.t;
   $('#newsDetailMeta').innerHTML=
     `<span class="nd-tag">${esc(n.tag||'')}</span>
@@ -302,14 +323,14 @@ async function doNewsRefresh(from){
     setTimeout(()=>{ $('#newsSyncState').textContent='下拉可刷新实时热点'; },4000);
   }
   /* 后台静默预取其余分类，切换时即时可见 */
-  NewsCategories.forEach(c=>{ if(c.id!==cur) ensureCategory(c.id); });
+  getNewsCats().forEach(c=>{ if(c.id!==cur) ensureCategory(c.id); });
 }
 
 function initNews(){
   renderNewsTabs();
   renderNews();
   ensureCategory(State.newsCat);
-  NewsCategories.forEach(c=>{ if(c.id!==State.newsCat) setTimeout(()=>ensureCategory(c.id), 500); });
+  getNewsCats().forEach(c=>{ if(c.id!==State.newsCat) setTimeout(()=>ensureCategory(c.id), 500); });
   $('#newsRefreshBtn').onclick=()=>doNewsRefresh('top');
   const fab=$('#newsFab');
   fab.onclick=()=>doNewsRefresh('fab');
@@ -325,6 +346,44 @@ function initNews(){
   $('#newsModalClose').onclick=closeNewsDetail;
   $('#newsModalClose2').onclick=closeNewsDetail;
   $('#newsModal').addEventListener('click',e=>{ if(e.target.id==='newsModal') closeNewsDetail(); });
+  /* 资讯分类管理：开启/关闭 + 调整顺序 */
+  $('#newsCatBtn').onclick=()=>{ renderNewsCatEditor(); $('#newsCatModal').classList.remove('hidden'); };
+  $('#newsCatClose').onclick=()=>$('#newsCatModal').classList.add('hidden');
+  $('#newsCatModal').addEventListener('click',e=>{ if(e.target.id==='newsCatModal') $('#newsCatModal').classList.add('hidden'); });
+  $('#newsCatDone').onclick=()=>{ applyNewsCats(); $('#newsCatModal').classList.add('hidden'); toast('资讯分类已更新'); };
+  $('#newsCatReset').onclick=()=>{ State.newsCats=defaultNewsCats(); renderNewsCatEditor(); toast('已恢复默认分类'); };
+}
+
+/* 渲染分类管理列表（开关 + 上移/下移） */
+function renderNewsCatEditor(){
+  const list=$('#newsCatList'); if(!list) return; list.innerHTML='';
+  let cfg = (State.newsCats && State.newsCats.length) ? State.newsCats : (State.newsCats=defaultNewsCats());
+  const ids=cfg.map(x=>x.id);
+  NEWS_MASTER.forEach(c=>{ if(!ids.includes(c.id)) cfg.push({id:c.id,enabled:true}); });
+  cfg.forEach((row,idx)=>{
+    const m=findCat(row.id); if(!m) return;
+    const el=document.createElement('div'); el.className='nc-row';
+    el.innerHTML=`
+      <div class="nc-move">
+        <button class="nc-up" ${idx===0?'disabled':''} title="上移">▲</button>
+        <button class="nc-down" ${idx===cfg.length-1?'disabled':''} title="下移">▼</button>
+      </div>
+      <div class="nc-icon">${m.icon}</div>
+      <div class="nc-name"><b>${esc(m.name)}</b><span>${esc(m.label)}</span></div>
+      <label class="switch nc-switch ${row.enabled?'on':''}"><input type="checkbox" ${row.enabled?'checked':''}><i></i></label>`;
+    el.querySelector('.nc-up').onclick=()=>{ if(idx>0){ [cfg[idx-1],cfg[idx]]=[cfg[idx],cfg[idx-1]]; renderNewsCatEditor(); } };
+    el.querySelector('.nc-down').onclick=()=>{ if(idx<cfg.length-1){ [cfg[idx+1],cfg[idx]]=[cfg[idx],cfg[idx+1]]; renderNewsCatEditor(); } };
+    el.querySelector('input').onchange=e=>{ row.enabled=e.target.checked; el.querySelector('.nc-switch').classList.toggle('on', e.target.checked); };
+    list.appendChild(el);
+  });
+}
+/* 保存分类配置并刷新界面 */
+function applyNewsCats(){
+  const vis=getNewsCats();
+  if(!vis.some(c=>c.id===State.newsCat)){ State.newsCat = vis.length? vis[0].id : 'daily'; }
+  save();
+  renderNewsTabs(); renderNews();
+  vis.forEach((c,i)=>{ if(c.id!==State.newsCat) setTimeout(()=>ensureCategory(c.id), 300); });
 }
 
 /* =============================================================
@@ -1023,23 +1082,51 @@ function startVoice(ctx){
   const ph=phrases[ctx]||phrases.idea;
   $('#listenPillText').textContent=ph[0];
   rec.lang='zh-CN';
-  rec.interimResults=false; rec.continuous=false; rec.maxAlternatives=1;
+  // 开启 interimResults：既能实时回显，也能在手动停止/欠稳环境兜底拿到文本
+  rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+  let finalText='';
+  let lastInterim='';
   rec.onstart=()=>{ $('#listenPillText').textContent=ph[1]; };
   rec.onresult=e=>{
-    const parts=[];
-    for(let i=0;i<e.results.length;i++){ if(e.results[i].isFinal) parts.push(e.results[i][0].transcript); }
-    const text=parts.join('').trim();
-    if(text){ voiceState='result'; handleVoiceResult(ctx,text); }
+    let interim='';
+    for(let i=0;i<e.results.length;i++){
+      const r=e.results[i];
+      if(r.isFinal) finalText+=r[0].transcript;
+      else interim+=r[0].transcript;
+    }
+    if(interim){ lastInterim=interim; $('#listenPillText').textContent=interim; }   // 实时显示正在识别的内容
+    if(finalText.trim()){
+      voiceState='result';
+      handleVoiceResult(ctx, finalText.trim());
+      finalText=''; lastInterim=''; // 防止 onend 兜底重复处理
+    }
   };
   rec.onerror=ev=>{
-    pill.classList.add('hidden'); voiceActive=false; voiceState='idle';
+    pill.classList.add('hidden'); voiceActive=false;
     if(ev.error==='not-allowed') toast('麦克风权限被拒绝，请在浏览器设置中允许','err');
     else if(ev.error==='no-speech') toast('未检测到声音，请靠近麦克风再说一次','warn');
     else if(ev.error==='network') toast('语音服务连接失败，请检查网络或改用键盘','warn');
     else if(ev.error==='aborted'){ /* 手动停止，忽略 */ }
     else toast('语音识别出错：'+ev.error,'err');
+    if(voiceState==='result') return; // 已成功处理，不再兜底
+    voiceState='idle';
+    const t=(finalText||lastInterim).trim();
+    if(t){ finalText=''; lastInterim=''; handleVoiceResult(ctx,t); }
   };
-  rec.onend=()=>{ pill.classList.add('hidden'); voiceActive=false; voiceState='idle'; };
+  rec.onend=()=>{
+    pill.classList.add('hidden'); voiceActive=false;
+    // 结束但未拿到最终文本：用已累积文本兜底（手动停止常走这里）
+    if(voiceState==='listening'){
+      const t=(finalText||lastInterim).trim();
+      if(t){
+        finalText=''; lastInterim='';
+        voiceState='result';
+        handleVoiceResult(ctx, t);
+      } else {
+        voiceState='idle';
+      }
+    }
+  };
   try{ rec.start(); }
   catch(e){
     toast('语音已占用，请稍后再试','warn');
@@ -1050,7 +1137,7 @@ function startVoice(ctx){
 function stopVoice(){
   const rec=recognition;
   if(rec){ try{ rec.stop(); }catch(e){} }
-  $('#listenPill').classList.add('hidden');
+  // 不立即隐藏 pill：等待 onresult/onend 把识别内容弹出来再收起
 }
 /* 初始化时：若不支持语音识别，禁用按钮并给出引导，避免「点了没反应」 */
 function refreshVoiceButtons(){
@@ -1064,17 +1151,29 @@ function refreshVoiceButtons(){
 }
 function handleVoiceResult(ctx,text){
   if(ctx==='task') openTaskConfirm(parseTaskText(text));
-  else if(ctx==='report') handleReportVoice(text);
+  else if(ctx==='report') openReportConfirm(text);
   else openIdeaConfirm(text);
 }
-/* 工作总结语音：识别到的内容直接作为一条「语音」条目入库 */
-function handleReportVoice(text){
-  if(!text || !text.trim()) return;
-  if(addLogEntry(text, 'voice')){
-    toast('已录入一条语音内容 🎤');
-  }else{
-    toast('语音识别结果为空','warn');
-  }
+/* 工作总结语音：先把识别到的内容弹窗展示，确认后作为「语音」条目入库 */
+function openReportConfirm(text){
+  if(!text || !text.trim()){ toast('语音识别结果为空','warn'); return; }
+  window.__voiceReport=text;
+  $('#voiceModalTitle').textContent='确认今日工作';
+  $('#voiceModalTag').textContent='🎤 语音识别结果';
+  $('#voiceModalBody').innerHTML=`
+    <div class="vm-label">识别到的内容</div>
+    <div class="vm-idea">${esc(text)}</div>
+    <div class="vm-hint">确认后作为一条「语音」条目记入今日日志${State.ideaAi?'，可继续点「生成今日总结」做 AI 归纳。':''}</div>`;
+  const ok=$('#voiceModalOk');
+  ok.textContent='✓ 记入今日日志';
+  ok.onclick=()=>{
+    const t=window.__voiceReport;
+    if(t && addLogEntry(t,'voice')) toast('已录入一条语音内容 🎤');
+    window.__voiceReport=null;
+    closeVoiceModal();
+  };
+  $('#voiceModalCancel').onclick=()=>{ window.__voiceReport=null; closeVoiceModal(); };
+  $('#voiceModal').classList.remove('hidden');
 }
 /* 解析语音：抽取标题/周期/子任务/优先级 */
 function parseTaskText(text){
@@ -1190,11 +1289,14 @@ function save(){
   Store.write({
     tasks:State.tasks, log:State.log, aiSummaries:State.aiSummaries,
     ideas:State.ideas, ideaAi:State.ideaAi, theme:State.theme,
+    newsCats:State.newsCats,
   });
 }
 function load(){
   const d=Store.read(); if(!d) return;
   if(Array.isArray(d.tasks)) State.tasks=d.tasks;
+  if(Array.isArray(d.newsCats) && d.newsCats.length) State.newsCats=d.newsCats;
+  else State.newsCats=defaultNewsCats();
   if(d.log){
     State.log=d.log;
     /* 数据迁移：旧的 string → entries 数组 */
