@@ -1,5 +1,5 @@
 /* Service Worker - offline cache for the Workbench PWA */
-const CACHE = 'workbench-v10';
+const CACHE = 'workbench-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -31,14 +31,17 @@ self.addEventListener('message', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // Only handle same-origin
+  // 只接管同源
   if(url.origin !== location.origin) return;
+  // 只处理 GET
+  if(e.request.method !== 'GET') return;
+
   // 数据快照（data/）走「网络优先」，保证每次都能拉到最新生成的财经/游戏资讯；
   // 离线时回退到缓存副本，避免空白。
   if(url.pathname.includes('/data/')){
     e.respondWith(
       fetch(e.request).then(resp=>{
-        if(e.request.method==='GET' && resp.status===200){
+        if(resp && resp.status===200){
           const clone=resp.clone();
           caches.open(CACHE).then(c=>c.put(e.request, clone));
         }
@@ -47,17 +50,36 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
+
+  // 导航请求（顶层访问或刷新）走「缓存优先 + 离线回退到 index」
+  const isNav = e.request.mode==='navigate' || (e.request.headers.get('accept')||'').includes('text/html');
+  if(isNav){
+    e.respondWith(
+      caches.match(e.request).then(cached=>{
+        if(cached) return cached;
+        return fetch(e.request).then(resp=>{
+          if(resp && resp.status===200){
+            const clone=resp.clone();
+            caches.open(CACHE).then(c=>c.put(e.request, clone));
+          }
+          return resp;
+        }).catch(()=> caches.match('./index.html'))
+      })
+    );
+    return;
+  }
+
+  // 静态资源：缓存优先，后台静默更新；离线时静默回退
   e.respondWith(
     caches.match(e.request).then(cached => {
-      if(cached) return cached;
-      return fetch(e.request).then(resp => {
-        // cache GET successful responses
-        if(e.request.method==='GET' && resp.status===200){
+      const networkFetch = fetch(e.request).then(resp => {
+        if(resp && resp.status===200){
           const clone = resp.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return resp;
-      }).catch(()=> caches.match('./index.html'));
+      }).catch(()=> cached);
+      return cached || networkFetch;
     })
   );
 });

@@ -182,10 +182,42 @@ async function loadCategory(catId, force){
   }else{
     const payload=await fetchJSON(API_BASE[cfg.src]+cfg.path);
     items = cfg.src==='aihot'? normAihot(payload) : normSixty(catId, payload);
+    /* 微博热搜：主源只给标题+热度。并行拉取增强源补上「微博官方话题分类」，
+       让每条都有可读的归类内容（艺人/民生/综艺/突发…）。增强源失败不影响主列表。 */
+    if(cfg.src==='sixty' && catId==='weibo'){
+      await enrichWeiboCategories(items).catch(()=>{});
+    }
   }
   if(!items.length) throw new Error('数据源暂时没有内容');
   writeNewsCache(catId, items);
   return {items, at:Date.now(), stale:false};
+}
+/* 微博热搜官方分类增强源（fork of 60s，CORS 开放，附带真实 category）
+   按标题合并到主列表每条，字段存于 n.wbcat / n.wbtime */
+const WEIBO_CAT_URL='https://hot.shaomingbo.com/v2/weibo';
+async function enrichWeiboCategories(items){
+  if(!items || !items.length) return items;
+  try{
+    const payload=await fetchJSON(WEIBO_CAT_URL, 6000);
+    const list=(payload&&payload.data)||[];
+    const byTitle=new Map();
+    list.forEach(x=>{ if(!byTitle.has(x.title)) byTitle.set(x.title,x); });
+    items.forEach(n=>{
+      const m=byTitle.get(n.t);
+      if(m){
+        if(m.category) n.wbcat=String(m.category).trim();
+        if(m.onboardTime){
+          n.wbtime=String(m.onboardTime).trim();
+          // 顺带把「上榜时间」转成友好相对时间，用于列表展示
+          const rel=fmtAgo(n.wbtime.replace(' ','T'));
+          if(rel) n.time=rel;
+        }
+        // 若主源缺 url，用增强源的搜索链接补齐
+        if(!n.url && m.link) n.url=String(m.link);
+      }
+    });
+  }catch(e){ /* 静默：增强源不可用时保留纯标题列表 */ }
+  return items;
 }
 
 /* ---- 分类加载状态机 ---- */
@@ -263,6 +295,7 @@ function renderNews(){
         <div class="news-meta">
           ${i===0?'<span class="news-hot">热</span>':''}
           <span class="news-tag">${esc(n.tag||'')}</span>
+          ${n.wbcat?`<span class="news-tag wbcat">微博 · ${esc(n.wbcat)}</span>`:''}
           ${n.heat?`<span class="news-heat">${esc(n.heat)}</span>`:''}
           ${n.time?`<span class="news-time">${esc(n.time)}</span>`:''}
         </div>
@@ -297,6 +330,32 @@ function inferWeiboTopics(title){
   if(!tags.length) tags.push('社会热点');
   return [...new Set(tags)].slice(0,3);
 }
+/* 微博官方分类 → 一句阅读引导（让详情不至于只有一句干巴巴的话） */
+const WEIBO_CAT_GUIDE={
+  '艺人':'属娱乐圈人物动态，通常围绕明星个人事件或公开露面，博文以粉丝讨论与娱乐号报道为主。',
+  '综艺':'与正在播出的综艺节目相关，常因节目内容、嘉宾表现或名场面登榜。',
+  '剧集':'与热播影视剧集相关，多因剧情走向、演员演技或幕后话题引发追剧讨论。',
+  '电影':'与院线或网络电影相关，常因口碑、票房、档期或主创宣传上榜。',
+  '演出':'指演唱会、音乐节、舞台剧等现场演出事件。',
+  '民生新闻':'涉普通百姓日常生活的社会新闻，如就医、出行、就业、社保等，与公众切身利益相关。',
+  '突发/灾害':'涉及突发事故或自然灾害，请以官方通报为准，注意信息核实与避险提示。',
+  '社会':null,'社会热点':null,
+  '国内时政':'与国家政策、政务活动、部委动态相关，可留意权威发布。',
+  '海外新闻':'涉及境外国家与地区的时事，多来自驻外记者或国际媒体报道。',
+  '财经':'与经济、股市、消费、就业等话题相关，可结合宏观与行业视角判断。',
+  '互联网':'涉及互联网公司、平台产品、行业事件，多为科技媒体与从业者关注。',
+  '数码':'围绕手机、电脑、智能硬件等消费电子产品及发布动态。',
+  '教育':'与升学考试、学校、师生、教育政策相关。',
+  '游戏':'围绕游戏产品、赛事、行业动态展开。',
+  '情感':'涉及人际感情、两性话题、家庭关系等情感类内容。',
+  '幽默':'多为轻松搞笑、逗趣段子或趣味事件，娱乐性内容为主。',
+  '体育':'围绕体育赛事、运动员、球队与赛事结果。',
+};
+function weiboCatGuide(cat){
+  if(WEIBO_CAT_GUIDE[cat]===null) return null;
+  if(WEIBO_CAT_GUIDE[cat]) return `【阅读提示】${WEIBO_CAT_GUIDE[cat]}`;
+  return null;
+}
 function openNewsDetail(cat,n,rank){
   const cfg=findCat(cat)||NEWS_MASTER[0];
   $('#newsTitle').textContent=n.t;
@@ -308,14 +367,24 @@ function openNewsDetail(cat,n,rank){
   $('#newsDetailHeat').textContent=n.heat||'';
   const paras=[];
   if(n.d) paras.push(n.d);
-  // 微博热搜：加上 AI 话题推断
+  // 微博热搜：官方分类 + AI 话题洞察 + 热度解读
   if(cat==='weibo'){
     const topics=inferWeiboTopics(n.t);
-    paras.push(`【AI 话题洞察】该热搜归属于「${topics.join(' / ')}」领域。微博热搜反映当前大众注意力集中方向，可结合领域关键词判断舆论走向。`);
+    const realCat=n.wbcat||topics[0];
+    const heatTxt=n.heat||'';
+    paras.push(
+      `【话题归类】微博将「${n.t}」归入「${realCat}」话题。` +
+      (heatTxt?`当前在榜${heatTxt}的搜索热度，处于全国热搜前列，属于当下大众正在集中关注的事件。`
+             :`作为全国热搜在榜话题，反映当下大众注意力的集中方向。`)
+    );
+    const extra=weiboCatGuide(realCat);
+    if(extra) paras.push(extra);
+    paras.push(`可点击下方「阅读原文」跳转到微博搜索页，查看该话题下的实时博文与讨论。`);
+  } else {
+    paras.push(n.url
+      ? '以上为该条资讯的原始摘要。完整报道请点击下方「阅读原文」跳转至来源页面查看。'
+      : '该榜单来源仅提供标题，暂无更多正文。可在原平台搜索该标题查看完整内容。');
   }
-  paras.push(n.url
-    ? '以上为该条资讯的原始摘要。完整报道请点击下方「阅读原文」跳转至来源页面查看。'
-    : '该榜单来源仅提供标题，暂无更多正文。可在原平台搜索该标题查看完整内容。');
   $('#newsDetailBody').innerHTML=paras.map(p=>`<p>${esc(p)}</p>`).join('');
   const open=$('#newsModalOpen');
   if(n.url){ open.href=n.url; open.classList.remove('hidden'); }
@@ -1647,10 +1716,19 @@ function setupPWA(){
       setTimeout(()=>location.reload(),800);
     });
   }
+  /* 应用成功安装后关闭 install 弹层并标记 */
+  window.addEventListener('appinstalled',()=>{
+    deferredPrompt=null;
+    $('#installTip').classList.add('hidden');
+    localStorage.setItem('wbapp_install_dismissed','1');
+    toast('安装成功 ✓ 现在可以从主屏幕启动');
+  });
   window.addEventListener('beforeinstallprompt',e=>{
     e.preventDefault();
     deferredPrompt=e;
     setTimeout(()=>{
+      // 已安装（standalone / minimal-ui）就不再提示安装
+      if(isStandalonePWA()) return;
       if(!localStorage.getItem('wbapp_install_dismissed')){
         $('#installTip').classList.remove('hidden');
       }
@@ -1663,6 +1741,21 @@ function setupPWA(){
   if(ua.includes('iphone')||ua.includes('ipad')) hint='在 Safari 中点击分享按钮 → 添加到主屏幕';
   else if(ua.includes('android')) hint='在浏览器菜单中选择「添加到主屏幕」或「安装应用」';
   $('#installHint').textContent=hint;
+
+  /* 网络状态指示：离线时给出轻提示（不阻塞操作） */
+  function setNetBar(online){
+    let bar=document.getElementById('netBar');
+    if(online){ if(bar) bar.remove(); return; }
+    if(bar) return;
+    bar=document.createElement('div');
+    bar.id='netBar';
+    bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:200;background:var(--ink);color:var(--paper);font-size:11.5px;text-align:center;padding:4px 8px;letter-spacing:.3px';
+    bar.textContent='当前处于离线模式 · 已显示缓存内容';
+    document.body.appendChild(bar);
+  }
+  if(!navigator.onLine) setNetBar(false);
+  window.addEventListener('online',()=>{ setNetBar(true); toast('已恢复联网','ok'); });
+  window.addEventListener('offline',()=>{ setNetBar(false); toast('已切换到离线模式','warn'); });
 }
 
 function init(){
