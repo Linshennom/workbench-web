@@ -156,20 +156,28 @@
       <div class="mod-head">
         <div>
           <h2 class="mod-title">工作总结</h2>
-          <p class="mod-desc">记录每日 · AI 归纳</p>
+          <p class="mod-desc">分次录入 · 一日总结</p>
         </div>
         <div class="mod-actions">
-          <button class="btn ghost" id="logClearBtn">清空</button>
-          <button class="btn primary" id="logSaveBtn">保存并归纳</button>
+          <button class="btn ghost" id="logClearBtn">清空草稿</button>
         </div>
       </div>
 
       <div class="report-editor">
         <div class="panel-title">
           <h3>今日日志</h3>
-          <span id="logDate"></span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="logDate"></span>
+            <button class="mic-mini" id="reportVoiceBtn" title="语音录入">🎤</button>
+          </div>
         </div>
-        <textarea id="logInput" rows="5" placeholder="今天做了什么？比如：上午完成需求评审，下午修复登录模块 3 个 bug..."></textarea>
+        <textarea id="logInput" rows="4" placeholder="继续追加今日工作：上午完成了什么，下午解决了什么…随时录入，最后一键生成本日总结。"></textarea>
+        <div class="log-entries-head">
+          <h4>今日条目 <span class="log-entries-count" id="logEntriesCount">0</span></h4>
+          <button class="btn mini ghost" id="logSaveBtn">+ 录入本条</button>
+          <button class="btn mini primary" id="logSummarizeBtn">▶ 生成今日总结</button>
+        </div>
+        <div class="log-entries" id="logEntries"></div>
       </div>
 
       <div class="report-out">
@@ -178,7 +186,7 @@
           <span class="ai-badge">智能归纳</span>
         </div>
         <div class="report-out-body" id="reportOut">
-          <div class="placeholder">填写并保存后，<br>这里会生成结构化的 AI 总结。</div>
+          <div class="placeholder">录入条目后，点「生成今日总结」<br>这里会生成结构化的 AI 工作日报。</div>
         </div>
       </div>
 
@@ -199,7 +207,10 @@
         <div id="periodReportBody"></div>
       </div>
 
-      <div class="log-history-head"><h3>历史日志</h3></div>
+      <div class="log-history-head">
+        <h3>历史日志</h3>
+        <button class="btn mini ghost" id="logClearAllBtn">全部清除</button>
+      </div>
       <div class="log-history" id="logHistory"></div>
     </section>
 
@@ -243,6 +254,11 @@
     <button class="tab" data-mod="report"><span class="tab-ico">▤</span><span>总结</span></button>
     <button class="tab" data-mod="idea"><span class="tab-ico">✎</span><span>灵感</span></button>
   </nav>
+
+  <!-- 资讯浮动刷新按钮 -->
+  <button class="fab hidden" id="newsFab" title="刷新热点">
+    <span class="fab-spin">↻</span>
+  </button>
 
   <!-- 语音指示浮标 -->
   <div class="listen-pill hidden" id="listenPill">

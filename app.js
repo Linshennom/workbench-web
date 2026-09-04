@@ -238,22 +238,37 @@ function initNews(){
   freshNews(true);
   renderNewsTabs();
   renderNews();
-  $('#newsRefreshBtn').onclick=()=>{
-    const btn=$('#newsRefreshBtn');
-    btn.classList.add('spinning'); btn.disabled=true;
-    $('#newsSyncState').textContent='刷新中…';
-    setTimeout(()=>{
-      freshNews(true);
-      renderNewsTabs(); renderNews();
-      btn.classList.remove('spinning'); btn.disabled=false;
-      $('#newsSyncState').textContent='已更新 '+new Date().toTimeString().slice(0,5);
-      toast('热点已刷新');
-      setTimeout(()=>$('#newsSyncState').textContent='点击刷新加载热点',3000);
-    },500);
+  $('#newsRefreshBtn').onclick=()=>doNewsRefresh('top');
+  const fab=$('#newsFab');
+  fab.onclick=()=>doNewsRefresh('fab');
+  /* 滚动时显示/隐藏右下角浮动刷新 */
+  const updateFab=()=>{
+    const onNews=!$('#mod-news').classList.contains('hidden');
+    const st=window.pageYOffset||document.documentElement.scrollTop||document.body.scrollTop||0;
+    if(onNews && st>120){ fab.classList.remove('hidden'); }
+    else fab.classList.add('hidden');
   };
+  window.addEventListener('scroll',updateFab,{passive:true});
+  window.updateNewsFab=updateFab;
   $('#newsModalClose').onclick=closeNewsDetail;
   $('#newsModalClose2').onclick=closeNewsDetail;
   $('#newsModal').addEventListener('click',e=>{ if(e.target.id==='newsModal') closeNewsDetail(); });
+}
+function doNewsRefresh(from){
+  const btn=$('#newsRefreshBtn');
+  const fab=$('#newsFab');
+  btn.classList.add('spinning'); btn.disabled=true;
+  fab.classList.add('spinning'); fab.disabled=true;
+  $('#newsSyncState').textContent='刷新中…';
+  setTimeout(()=>{
+    freshNews(true);
+    renderNewsTabs(); renderNews();
+    btn.classList.remove('spinning'); btn.disabled=false;
+    fab.classList.remove('spinning'); fab.disabled=false;
+    $('#newsSyncState').textContent='已更新 '+new Date().toTimeString().slice(0,5);
+    toast('热点已刷新');
+    setTimeout(()=>$('#newsSyncState').textContent='点击刷新加载热点',3000);
+  },500);
 }
 
 /* =============================================================
@@ -452,6 +467,7 @@ function switchTaskView(v){
 function renderTaskArea(){
   if(State.taskView==='calendar') renderCalendar();
   else renderTaskList();
+  updateHello();
 }
 
 /* =============================================================
@@ -460,65 +476,256 @@ function renderTaskArea(){
 function renderLogDate(){ $('#logDate').textContent = todayStr(); }
 function renderLogHistory(){
   const wrap=$('#logHistory'); wrap.innerHTML='';
-  const dates=Object.keys(State.log).sort().reverse();
-  if(!dates.length){ wrap.innerHTML='<div style="color:var(--ink-3);font-size:12px;padding:6px 4px">还没有历史日志</div>'; return; }
+  const dates=Object.keys(State.log).filter(d=>getEntries(d).length).sort().reverse();
+  $('#logClearAllBtn').style.display = dates.length? 'inline-flex':'none';
+  if(!dates.length){ wrap.innerHTML='<div style="color:var(--ink-3);font-size:12px;padding:6px 4px">还没有历史日志，记录第一天的内容吧</div>'; return; }
   dates.forEach(ds=>{
+    const arr=getEntries(ds);
     const item=document.createElement('div'); item.className='log-item';
-    const txt=State.log[ds];
     const hasSum=State.aiSummaries[ds];
-    item.innerHTML=`<div class="log-item-date"><span>${ds}</span>${hasSum?'<span class="sum-badge">✓ AI已归纳</span>':''}</div>
-      <div class="log-item-text">${esc(txt.length>80?txt.slice(0,80)+'…':txt)}</div>`;
+    const concat=arr.map(e=>e.text).join('。').slice(0,80);
+    const count=arr.length;
+    item.innerHTML=`<div class="log-item-top">
+        <div class="log-item-date"><span>${ds}</span><span class="sum-badge">${count} 条</span>${hasSum?'<span class="sum-badge">✓ AI已归纳</span>':''}</div>
+        <button class="log-del" data-ds="${esc(ds)}" title="删除这一天">🗑</button>
+      </div>
+      <div class="log-item-text">${esc(concat)}${concat.length>=80?'…':''}</div>
+      ${hasSum?'<div class="log-item-sum">查看该日 AI 总结 →</div>':''}`;
     item.style.cursor='pointer';
-    item.onclick=()=>{ $('#logInput').value=State.log[ds]||''; if(State.aiSummaries[ds]) renderAiSummary(ds); };
+    item.addEventListener('click',e=>{
+      if(e.target.classList.contains('log-del')) return;
+      if(State.aiSummaries[ds]) renderAiSummary(ds);
+      else toast(ds+' 还没有生成总结，点「生成今日总结」先','warn');
+    });
+    item.querySelector('.log-del').onclick=(ev)=>{ ev.stopPropagation(); deleteOneLog(ds); };
     wrap.appendChild(item);
   });
 }
-function aiSummarize(text){
-  const sent=text.split(/[。；\n！？!?]/).map(s=>s.trim()).filter(s=>s.length>1);
-  const items=[];
-  sent.forEach(s=>{
-    let core=s.replace(/^(上午|下午|今天|昨晚|中午|晚上|早上|本日|本周|昨日|刚才)\s*[，,、:：]?\s*/,'');
-    items.push(core.replace(/\s{2,}/g,' '));
-  });
-  const kws=['完成','修复','推进','编写','调研','评审','上线','实现','优化','开发','处理','解决','维护','调试','设计','沟通','复盘','整理','阅读','学习','测试','发布','对接','参加','准备'];
-  const taskItems=sent.filter(s=>kws.some(k=>s.includes(k))).slice(0,6);
-  const highlights = taskItems.length? taskItems : items.slice(0,6);
-  const totalItems = items.length;
-  const catMap=[['开发|代码|接口|bug|模块|功能|上线|实现','开发'],['会议|评审|对齐|沟通|协调|汇报|讨论','沟通协作'],['文档|方案|需求|设计|原型|PRD|写作','文档方案'],['数据|分析|测试|优化|复盘|调研|整理','分析复盘']];
-  let topCat='综合推进'; let topN=0;
-  catMap.forEach(([re,label])=>{
-    const n=sent.filter(s=>new RegExp(re).test(s)).length;
-    if(n>topN){topN=n;topCat=label;}
-  });
-  const goodKw=['完成','修复','上线','搞定','解决','实现','通过'];
-  const good=sent.filter(s=>goodKw.some(k=>s.includes(k))).length;
-  const eff=Math.min(98, Math.round(52+good*9+sent.length*2));
-  const kpis=[{l:'记录事项',v:totalItems},{l:'关键成果',v:highlights.length},{l:'推进效率',v:eff+'%'}];
-  const summary=`今日共记录 ${totalItems} 项工作，重心集中在「${topCat}」方向${taskItems.length?`，其中 ${taskItems.length} 项构成主要产出`:''}。${good?`有 ${good} 条可识别为完成/闭环事项，整体推进节奏${eff>=80?'良好':'正常'}。`:''}建议下一步聚焦高优先级遗留项，并在收尾时同步进展给相关协作方。`;
-  return {kpis, items:highlights, summary};
+/* 单独删除某天日志 */
+function deleteOneLog(ds){
+  const arr=getEntries(ds);
+  if(!arr.length) return;
+  if(!confirm('删除 '+ds+' 的全部 '+arr.length+' 条日志与AI总结？此操作不可恢复。')) return;
+  State.log[ds]=[];
+  delete State.aiSummaries[ds];
+  if(ds===todayStr()){
+    $('#logInput').value='';
+    $('#reportOut').innerHTML='<div class="placeholder">录入条目后，点「生成今日总结」<br>这里会生成结构化的 AI 总结。</div>';
+    renderTodayEntries();
+  }
+  save(); renderLogHistory();
+  toast('已删除该日日志');
 }
+/* 全部清除历史日志 */
+function clearAllLogs(){
+  if(!Object.keys(State.log).filter(d=>getEntries(d).length).length){ toast('暂无历史日志','warn'); return; }
+  if(!confirm('确定清除全部历史日志与AI总结？此操作不可恢复。')) return;
+  State.log={}; State.aiSummaries={};
+  $('#logInput').value='';
+  $('#reportOut').innerHTML='<div class="placeholder">录入条目后，点「生成今日总结」<br>这里会生成结构化的 AI 总结。</div>';
+  renderTodayEntries();
+  save(); renderLogHistory();
+  toast('已清除全部历史日志');
+}
+/* 把一条语音/手打内容切分为语义句，并去掉时间/口语前缀，返回 {clean,time,where} */
+function cleanSent(s){
+  let clean=s.trim();
+  const tMat=clean.match(/^(凌晨|清晨|早上|上午|中午|下午|傍晚|晚上|昨晚|深夜|今日|今天|本日|白天|一整天)?\s*[，,、:：]?\s*/);
+  let time=tMat?tMat[1]:'';
+  clean=clean.replace(/^(凌晨|清晨|早上|上午|中午|下午|傍晚|晚上|昨晚|深夜|今日|今天|本日|白天|一整天)\s*[，,、:：]?\s*/,'');
+  clean=clean.replace(/\s{2,}/g,' ').trim();
+  return {clean,time};
+}
+const DONE_R=/完成|上线|交付|搞定|修复|解决|实现|发布|通过|落地|收尾|跑通|闭环|验收|发货|写完|改完|推完|部署|通过评审/;
+const PROG_R=/推进|进行|开展|推进中|编写|开发|调研|整理|优化|测试|设计|对接|启动|开始|跟进|在写|在改|在做|初稿|原型|正在|打磨|迭代|搭建|调整|重构|梳理/;
+const ISSUE_R=/问题|阻塞|风险|卡住|困难|待|遗留|未|异常|延期|遇到|卡点|阻碍|缺口|不足|等待|反复|报错|bug|宕机/;
+const COMM_R=/会议|评审|对齐|沟通|汇报|讨论|协调|同步|周会|例会|需求会|评审会|汇报会|协作|对接人|向上汇报/;
+const RESULT_R=/([\d一二三四五六七八九十百]+)\s*(个|项|次|条|篇|份|页|%|单|人|家|版本|bug|issue)/;
+const NEG_R=/未|尚未|还没|没有|没能|无法|不能|难以|失败|受阻|卡在/;
+/* 话题标签：把流水账改写为规范化日报条目 */
+const TAG_MAP=[
+  ['PRD|需求文档|需求初稿|产品方案|原型图','产品需求'],
+  ['接口|联调|API|后端|服务端|数据库','接口联调'],
+  ['前端|页面|UI|组件|样式|H5|小程序','前端开发'],
+  ['评审会|周会|例会|晨会|站会|复盘会|需求会','会议对齐'],
+  ['bug|缺陷|报错|异常|故障|崩溃|宕机','问题修复'],
+  ['文档|报告|周报|汇报材料|方案稿|PPT','文档沉淀'],
+  ['测试|用例|回归|压测|联测|自测','测试验证'],
+  ['数据|指标|分析|报表|看板|埋点','数据分析'],
+  ['设计|视觉|配色|海报|封面|排版','设计输出'],
+  ['客户|甲方|用户|需求方|运营|商务','对外沟通'],
+  ['招聘|面试|培训|带教|团队|分工','团队协作'],
+];
+function tagOf(s){ for(const [re,label] of TAG_MAP){ if(new RegExp(re,'i').test(s)) return label; } return ''; }
+function stripTag(s){ return String(s||'').replace(/^【[^】]+】/,''); }
+/* 否定判定：否定词出现在完成动词之前 → 其实并未完成，应归为问题 */
+function isNegated(s){
+  const dm=s.match(/完成|解决|修复|通过|上线|交付|跑通|闭环|搞定|改完|写完|推完|落地|验收|实现/);
+  const nm=s.match(NEG_R);
+  if(!dm||!nm) return false;
+  return nm.index < dm.index;
+}
+/* 润色：去口语填充 → 补标签 → 规范标点，形成日报条目 */
+function polishClause(s){
+  let x=String(s||'').trim();
+  if(!x) return '';
+  x=x.replace(/^(嗯|啊|哦|呃|那个|这个|就是|然后|接着|后来|还有|另外|反正|大概|我觉得|我感觉|我想|我们|我)[，,、\s]*/,'');
+  x=x.replace(/[，,、]\s*(然后|接着|还有|另外|就是)(?=[，,、\s])/g,'，');
+  x=x.replace(/[，,、]\s*$/,'').replace(/\s{2,}/g,' ').trim();
+  if(!x) return '';
+  const tag=tagOf(x);
+  if(!/[。！？]$/.test(x)) x+='。';
+  return tag? `【${tag}】${x}` : x;
+}
+/* 切分语义单元：先按句末标点，长句再按逗号拆开，避免一句塞多件事 */
+function splitClauses(text){
+  const out=[];
+  String(text||'').split(/[。；\n！？!?]/).map(s=>s.trim()).filter(s=>s.length>1).forEach(s=>{
+    const c=cleanSent(s);
+    const body=c.clean;
+    if(body.length>=14 && /[，,、]/.test(body)){
+      const parts=body.split(/[，,、]/).map(x=>x.trim()).filter(x=>x.length>1);
+      if(parts.length>1){
+        parts.forEach(p=>{ const pc=cleanSent(p); out.push({clean:pc.clean, time:pc.time||c.time}); });
+        return;
+      }
+    }
+    out.push(c);
+  });
+  return out;
+}
+/* AI 归纳为规范的工作报告结构 */
+function aiSummarize(text){
+  const clauses=splitClauses(text);
+  const buckets={done:[],progress:[],issue:[],comm:[]};
+  clauses.forEach(({clean})=>{
+    if(!clean) return;
+    if(DONE_R.test(clean) && !isNegated(clean)) buckets.done.push(clean);
+    else if(ISSUE_R.test(clean) || isNegated(clean)) buckets.issue.push(clean);
+    else if(COMM_R.test(clean)) buckets.comm.push(clean);
+    else buckets.progress.push(clean);
+  });
+  const done=dedup(buckets.done).map(polishClause).filter(Boolean).slice(0,8);
+  const progress=dedup(buckets.progress).map(polishClause).filter(Boolean).slice(0,8);
+  const issue=dedup(buckets.issue).map(polishClause).filter(Boolean).slice(0,6);
+  const comm=dedup(buckets.comm).map(polishClause).filter(Boolean).slice(0,6);
+  // 统计成果数据
+  const allClean=[...done,...progress,...issue,...comm];
+  let numbers=0; const numList=[];
+  allClean.forEach(c=>{ const mm=c.match(RESULT_R); if(mm){ numbers++; numList.push(mm[0]); } });
+  const doneN=done.length, total=Math.max(1,clauses.length);
+  const progressRate=Math.min(100,Math.round((doneN/total)*100));
+  // 领域归类（用原句粗判重心）
+  const catMap=[['开发|代码|接口|bug|模块|功能|上线|实现|部署|后端|前端','开发研发'],['会议|评审|对齐|沟通|协调|汇报|讨论|周会|需求','沟通协作'],['文档|方案|需求|设计|原型|PRD|写作|报告|PPT','文档方案'],['数据|分析|测试|优化|复盘|调研|整理|指标','分析优化']];
+  let topCat='综合推进'; let topN=0;
+  const catCount={};
+  clauses.forEach(({clean})=>{ for(const [re,label] of catMap){ if(new RegExp(re).test(clean)){ catCount[label]=(catCount[label]||0)+1; break; } } });
+  Object.keys(catCount).forEach(k=>{ if(catCount[k]>topN){topN=catCount[k];topCat=k;} });
+  // 明日计划：遗留项优先闭环，进行项持续推进
+  const next=[];
+  issue.slice(0,3).forEach(s=>next.push(`优先闭环：${stripTag(s).replace(/。$/,'')}，明确责任人与时间点`));
+  progress.slice(0,2).forEach(s=>next.push(`继续推进：${stripTag(s).replace(/。$/,'')}`));
+  if(!next.length) next.push('保持当前节奏，提前梳理明日待办并按优先级排定顺序');
+  const kpis=[{l:'完成事项',v:doneN+'项'},{l:'今日工作量',v:total+'条'},{l:'成果完成率',v:progressRate+'%'}];
+  const summary=`今日共梳理 ${total} 项工作，重心落在「${topCat}」方向，已闭环 ${doneN} 项${numbers?`，涉及「${numList.slice(0,4).join('、')}」等可量化产出`:''}。${issue.length?`当前存在 ${issue.length} 项待跟进问题（${stripTag(issue[0]).replace(/。$/,'')}），需在明日优先处理；`:'推进过程未出现明显阻塞；'}${progress.length?`另有 ${progress.length} 项工作处于进行中，建议保持连续性并在下一节点同步进展。`:'各项工作均已形成明确结果。'}整体产出${doneN>=3?'较为饱满':'仍有提升空间'}，明日重点建议围绕遗留问题与未完成事项展开。`;
+  return {kpis, done, progress, issue, comm, next, summary, raw:clauses.map(c=>c.clean)};
+}
+function dedup(arr){ return [...new Set(arr)]; }
 function renderAiSummary(ds){
   const s=State.aiSummaries[ds];
   const out=$('#reportOut');
   if(!s){ out.innerHTML='<div class="placeholder">该日期暂无AI总结</div>'; return; }
+  const block=(title,items)=>{ if(!items.length) return ''; return `<div class="sum-head">${title}</div><ul>${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`; };
   out.innerHTML=`
-    <div style="font-size:11px;color:var(--ink-3);margin-bottom:5px;font-family:var(--mono)">日期 ${ds}</div>
+    <div style="font-size:11px;color:var(--ink-3);margin-bottom:5px;font-family:var(--mono)">AI 工作日报 · ${ds}</div>
     <div class="sum-kpi">${s.kpis.map(k=>`<div class="kpi"><b>${k.v}</b><span>${k.l}</span></div>`).join('')}</div>
-    <div class="sum-head">工作要点归纳</div>
-    <ul>${s.items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>
+    ${block('一、今日完成',s.done)}
+    ${block('二、进行中 / 推进',s.progress)}
+    ${block('三、问题与待办',s.issue)}
+    ${block('四、沟通与协作',s.comm)}
+    ${block('五、明日计划',s.next||[])}
     <div class="sum-head">总体小结</div>
     <div class="sum-text">${esc(s.summary)}</div>`;
 }
-function doSummarize(){
-  const text=$('#logInput').value.trim();
-  if(!text){ toast('请先填写今日工作内容','warn'); return; }
+/* 取得某日条目数组（保证是数组） */
+function getEntries(ds){
+  if(!State.log[ds]) State.log[ds]=[];
+  if(typeof State.log[ds]==='string'){
+    const txt=State.log[ds];
+    State.log[ds]= txt?[{id:uid(),text:txt,time:'00:00',source:'legacy'}]:[];
+  }
+  if(!Array.isArray(State.log[ds])) State.log[ds]=[];
+  return State.log[ds];
+}
+/* 拼接某日所有条目为单个文本（用于 AI 总结） */
+function concatEntries(ds){
+  const arr=getEntries(ds);
+  return arr.map(e=>e.text).join('。\n');
+}
+/* 当前时间字符串 HH:MM */
+function nowHM(){
+  const d=new Date();
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+/* 录入一条新条目（手动 / 语音） */
+function addLogEntry(text, source){
+  text=(text||'').trim(); if(!text) return false;
   const ds=todayStr();
-  State.log[ds]=text;
+  const arr=getEntries(ds);
+  arr.push({id:uid(), text, time:nowHM(), source: source||'manual'});
+  save();
+  renderTodayEntries();
+  renderLogHistory();
+  return true;
+}
+/* 删除某一条目 */
+function removeLogEntry(entryId){
+  const ds=todayStr();
+  const arr=getEntries(ds);
+  const idx=arr.findIndex(e=>e.id===entryId);
+  if(idx<0) return;
+  arr.splice(idx,1);
+  save();
+  renderTodayEntries();
+  renderLogHistory();
+  toast('已删除该条目');
+}
+/* 渲染今日条目列表 */
+function renderTodayEntries(){
+  const ds=todayStr();
+  const arr=getEntries(ds);
+  const wrap=$('#logEntries'); if(!wrap) return;
+  wrap.innerHTML='';
+  arr.forEach(e=>{
+    const item=document.createElement('div');
+    item.className='entry-item';
+    const srcLabel=e.source==='voice'?'🎤 语音':e.source==='legacy'?'旧日志':'✎ 手动';
+    const srcCls=e.source==='voice'?'s-voice':e.source==='legacy'?'s-legacy':'s-manual';
+    item.innerHTML=`<div class="entry-side">
+        <span class="entry-time">${esc(e.time||'--:--')}</span>
+        <span class="entry-src ${srcCls}">${srcLabel}</span>
+      </div>
+      <div class="entry-text">${esc(e.text)}</div>
+      <button class="entry-del" data-id="${esc(e.id)}" title="删除本条">✕</button>`;
+    item.querySelector('.entry-del').onclick=(ev)=>{ ev.stopPropagation(); removeLogEntry(e.id); };
+    wrap.appendChild(item);
+  });
+  const c=$('#logEntriesCount'); if(c) c.textContent=arr.length;
+}
+/* 一键生成今日总结（先自动录入草稿，再调用 AI 总结） */
+function generateTodaySummary(){
+  const ds=todayStr();
+  const draft=$('#logInput').value.trim();
+  if(draft){ addLogEntry(draft, 'manual'); $('#logInput').value=''; }
+  const arr=getEntries(ds);
+  if(!arr.length){ toast('请先录入今天的条目','warn'); return; }
+  const text=concatEntries(ds);
   const res=aiSummarize(text);
   State.aiSummaries[ds]=res;
-  save(); renderLogHistory();
+  save();
   renderAiSummary(ds);
-  toast('已保存并生成 AI 总结 ✓');
+  renderLogHistory();
+  toast('已生成今日 AI 总结 ✓');
 }
 function periodReport(){
   const period=$('#reportPeriod').value;
@@ -536,80 +743,137 @@ function periodReport(){
   }
   const logs=Object.keys(State.log).filter(d=>d>=start&&d<=end);
   if(!logs.length){ toast(`本${period==='week'?'周':period==='month'?'月':'季度'}暂无日志记录`,'warn'); return; }
-  let totalText=''; const allItems=[];
-  logs.forEach(d=>{ totalText+=(State.log[d]||'')+'。'; const s=State.aiSummaries[d]; if(s&&s.items) allItems.push(...s.items); });
-  const uniq=[...new Set(allItems)].slice(0,10);
+  let totalText=''; const allItems=[], doneItems=[];
+  logs.forEach(d=>{ totalText+=concatEntries(d)+'。'; const s=State.aiSummaries[d]; if(s){ if(s.done) allItems.push(...s.done); else if(s.items) allItems.push(...s.items); if(s.progress) allItems.push(...s.progress); } });
+  const uniq=[...new Set(allItems)].slice(0,12);
   const days=logs.length;
-  const kpis=[{l:'记录天数',v:days+'天'},{l:'累计事项',v:Math.max(allItems.length,totalText.split(/[。；\n]/).filter(Boolean).length)},{l:'关键产出',v:uniq.length+'项'}];
+  const totalClauses=totalText.split(/[。；\n]/).filter(Boolean).length;
+  const kpis=[{l:'记录天数',v:days+'天'},{l:'累计事项',v:Math.max(allItems.length,totalClauses)},{l:'关键产出',v:uniq.length+'项'}];
   $('#periodReportWrap').classList.add('show');
   $('#periodReportTitle').textContent=`周期总结 · ${label}`;
   const wd=period==='week'?'本周':period==='month'?'本月':'本季度';
   $('#periodReportBody').innerHTML=`<div class="period-kpis">${kpis.map(k=>`<div class="kpi"><b>${k.v}</b><span>${k.l}</span></div>`).join('')}</div>
-    <div class="sum-head">${wd}工作成果</div>
+    <div class="sum-head">${wd}主要成果与进展</div>
     <ul>${uniq.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>
     <div class="sum-head">总体评价</div>
-    <div class="sum-text">${wd}共 ${days} 个工作日有内容沉淀，覆盖了上述核心产出方向。整体工作节奏${days>=5?'稳定且连贯':'尚有部分断档'}。${allItems.length>8?'工作量与覆盖度都较饱满':'事项较为聚焦'}。建议下一${period==='week'?'周':period==='month'?'月':'季度'}优先聚焦重复出现的高价值事项。</div>`;
+    <div class="sum-text">${wd}共有 ${days} 天有内容沉淀，累计梳理约 ${totalClauses} 条工作事项。整体节奏${days>=5?'相对连贯':'存在断档'}，覆盖方向${allItems.length>8?'较饱满':'相对聚焦'}。建议下一${period==='week'?'周':period==='month'?'月':'季度'}优先沉淀可量化的成果数据，并持续跟进重复出现的遗留问题。</div>`;
 }
 function initReportModule(){
   $('#logDate').textContent=todayStr();
-  $('#logSaveBtn').onclick=doSummarize;
-  $('#logClearBtn').onclick=()=>{ $('#logInput').value=''; $('#reportOut').innerHTML='<div class="placeholder">填写并保存后，<br>这里会生成结构化的 AI 总结。</div>'; toast('输入已清空'); };
+  /* 录入本条：把草稿追加为一条新条目 */
+  $('#logSaveBtn').onclick=()=>{
+    const ta=$('#logInput');
+    if(!ta.value.trim()){ toast('请先在草稿里写点内容','warn'); return; }
+    if(addLogEntry(ta.value,'manual')){
+      ta.value='';
+      toast('已录入一条 ✓');
+    }
+  };
+  /* 生成今日总结：自动收录草稿，再合并所有条目一并总结 */
+  $('#logSummarizeBtn').onclick=generateTodaySummary;
+  $('#reportVoiceBtn').onclick=()=>startVoice('report');
+  $('#logClearBtn').onclick=()=>{
+    $('#logInput').value='';
+    $('#reportOut').innerHTML='<div class="placeholder">录入条目后，点「生成今日总结」<br>这里会生成结构化的 AI 总结。</div>';
+    toast('草稿已清空');
+  };
+  /* 键盘快捷：Ctrl+Enter 在草稿中直接生成总结 */
+  $('#logInput').onkeydown=(e)=>{
+    if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){ e.preventDefault(); generateTodaySummary(); }
+  };
+  /* 启动渲染今日条目 */
+  renderTodayEntries();
   $('#reportGenBtn').onclick=periodReport;
   $('#periodReportClose').onclick=()=>$('#periodReportWrap').classList.remove('show');
+  $('#logClearAllBtn').onclick=clearAllLogs;
 }
 
 /* =============================================================
    模块四：灵感记录
    ============================================================= */
 function aiDiverge(idea){
+  const t=String(idea||'').trim();
+  if(!t) return {kind:'idea',topic:'创意火花',lines:['请先输入一段灵感或场景描述。']};
+
+  /* —— 判断是否为「场景/画面」类描述 —— */
+  const placeHit=/海边|海岸|沙滩|江边|河边|湖畔|湖面|山顶|山脚|森林|树林|草原|田野|巷|街道|路口|弄堂|楼道|阳台|窗|房间|卧室|书房|客厅|厨房|老屋|庭院|咖啡馆|餐厅|酒吧|书店|教室|会议室|办公室|天台|广场|站台|列车|地铁|公交|公园|桥上|屋檐|路灯|街角|小店|走廊/.exec(t);
+  const lightHit=/(清晨|早晨|拂晓|黎明|午后|正午|黄昏|傍晚|日落|夕阳|余晖|夜晚|深夜|凌晨|月色|月光|阳光|黄昏时|天亮前|日暮|雨后|雾|细雨|雨|雪|风里)/.exec(t);
+  const sensorHit=/(看到|听见|闻到|闻到|触|坐|走|站|推开|抬头|低头|回头|望|听|看|笑|哭|沉默|发呆|放空|身影|侧脸|肩|背影|手|目光|声音|脚步声|灯光|影子|倒影)/.test(t);
+  const isScene = !!placeHit || (!!lightHit && sensorHit) || (t.length>=16 && sensorHit && !/(app|产品|功能|需求|创业|项目|选题|变现|账号|课程|方案|用户)/.test(t));
+
+  if(isScene){ return divergeScene(t, lightHit?lightHit[1]:null, placeHit?placeHit[1]:null); }
+
+  /* —— 抽象创意类：沿用领域细分 —— */
   const kw=[
-    {re:'app|产品|功能|用户|需求',topic:'产品构想',angles:['核心用户与痛点','MVP最小可用功能','商业化路径','关键指标']},
-    {re:'写作|文章|文案|公众号|内容|故事|选题',topic:'内容创作',angles:['读者人群画像','黄金开头钩子','内容结构','传播与互动']},
-    {re:'视频|拍|账号|短视频|直播|脚本',topic:'视频内容',angles:['爆款选题','3秒开场','分镜脚本','涨粉与变现']},
-    {re:'设计|视觉|封面|ui|配色|风格',topic:'创意设计',angles:['视觉关键词','参考风格','配色与字体','落地场景']},
-    {re:'项目|创业|方向|点子|商机|想法',topic:'商业机会',angles:['市场规模','竞争差异','最小成本','快速试错']},
-    {re:'学习|读书|笔记|知识|课程|考试',topic:'学习成长',angles:['知识框架','联想知识点','行动清单','输出检验']},
+    {re:'app|产品|功能|用户|需求|界面|交互|工具|软件',topic:'产品构想',angles:['核心用户与痛点','MVP 最小可用','落地动作','衡量指标']},
+    {re:'写作|文章|文案|公众号|内容|故事|选题|标题',topic:'内容创作',angles:['读者是谁','黄金开头','行文骨架','传播点']},
+    {re:'视频|拍|账号|短视频|直播|脚本|分镜|剪辑',topic:'视频内容',angles:['爆款选题','三秒开场','分镜拆解','涨粉与变现']},
+    {re:'设计|视觉|封面|UI|配色|风格|字体|海报',topic:'创意设计',angles:['气质关键词','风格参考','配色字体','落地载体']},
+    {re:'项目|创业|方向|点子|商机|想法|生意',topic:'商业机会',angles:['痛点还是痒点','差异化','最小成本试错','规模化']},
+    {re:'学习|读书|笔记|知识|课程|考试|方法',topic:'学习成长',angles:['已有认知挂钩','可迁移的点','今晚做的小事','输出检验']},
   ];
-  let topic='创意火花'; let match=null;
-  kw.forEach(k=>{ if(!match&&new RegExp(k.re).test(idea)){match=k;topic=k.topic;} });
-  const angles=match?match.angles:['灵感内核提炼','潜在延伸','可落地行动','长期价值'];
-  const tips={
-    '灵感内核提炼':['把这句话抽象成一句话假设','这个念头背后真正的动机是什么'],
-    '潜在延伸':['如果放大100倍会是什么样','能否与正在做的事叠加产生化学反应'],
-    '可落地行动':['记录下第一个最小执行步骤','本周内安排30分钟去验证'],
-    '核心用户与痛点':['谁最会被这个想法打动','ta的哪些未被满足的需求被踩中'],
-    'MVP最小可用功能':['砍掉80%功能，留下最核心的一个','用一个原型快速测试反应'],
-    '商业化路径':['探索订阅/付费/增值三种模式','设计一个让人愿意付费的价值锚点'],
-    '关键指标':['用哪个数字衡量它真的有用','北极星指标应该是什么'],
-    '读者人群画像':['这类内容谁会主动转发','如何让读者觉得"说的就是我"'],
-    '黄金开头钩子':['第一句抛出冲突还是悬念','用具体数字或场景制造代入'],
-    '内容结构':['先结论还是先故事','用一个记忆点贯穿全文'],
-    '传播与互动':['设计一个让人想评论的提问','金句做结尾增强转发欲'],
-    '爆款选题':['第一个画面必须制造反差','用提问或痛点快速抓住注意力'],
-    '3秒开场':['把核心动作拆成5个镜头','高光时刻放在前15秒'],
-    '涨粉与变现':['哪类人群最容易持续关注','内容如何自然衔接转化'],
-    '视觉关键词':['用一个词概括想要的气质','大胆尝试一个反常识的视觉锚点'],
-    '参考风格':['列出三个同类风格灵感源','抽象成线条/材质/色彩三要素'],
-    '配色与字体':['选定一个主色+一个强调色','字体传达冷感还是温度'],
-    '落地场景':['先在哪个最小场景试跑','给这个想法找个立刻能用的宿主'],
-    '市场规模':['这个需求是痛点还是痒点','天花板有多高、增速如何'],
-    '竞争差异':['现有方案差在哪里','我凭什么做得更好'],
-    '最小成本':['不需要烧钱的第一步是什么','能不能先用现有资源跑通'],
-    '快速试错':['找个真实用户聊一次','做一个能测量意向的最小demo'],
-    '知识框架':['这个知识点和已有认知如何挂钩','画一张一句话关系图'],
-    '联想知识点':['三个跨领域案例与之呼应','能不能用一个比喻讲透它'],
-    '行动清单':['今晚就能做的一件小事','把它排进日程而不是收藏夹'],
-    '输出检验':['能否用教别人的方式检验理解','写一段100字复述看看'],
-    '长期价值':['三个月后它还会让我兴奋吗','哪些部分是普适可复用的'],
+  const m=kw.find(k=>new RegExp(k.re).test(t))||null;
+  const topic=m?m.topic:'创意火花';
+  const angles=m?m.angles:['内核是什么','谁能受益','最小一步','长期价值'];
+  const echo=`「${topic}」—— ${t.slice(0,30)}${t.length>30?'…':''}`;
+  const lines=[echo,`· ${angles[0]}：${_q(angles[0],t)}`,`· ${angles[1]}：${_q(angles[1],t)}`,`· 若落地，先做 ${_q('step',t)}`];
+  return {kind:'idea',topic,lines};
+}
+function _q(kind,t){
+  const idea=t.slice(0,22);
+  const prompts={
+    '核心用户与痛点':`谁会最需要「${idea}」，ta现在在哪一步上卡住了`,
+    'MVP 最小可用':`砍到只剩一个最核心动作，它就是「${idea}」的最小版本`,
+    '落地动作':`把「${idea}」拆成一个今天就能发出的最小动作`,
+    '衡量指标':`用一个数字判断「${idea}」到底有没有被真正用起来`,
+    '读者是谁':`谁会愿意把「${idea}」转发，点开那一下的动机是什么`,
+    '黄金开头':`用一句有反差或悬念的话，替「${idea}」开个头`,
+    '行文骨架':`「${idea}」按 冲突→展开→落点 三段推进会更清楚`,
+    '传播点':`给「${idea}」留一个让人想接话或截图的钩子`,
+    '爆款选题':`第一个画面先制造反差，再抛出「${idea}」`,
+    '三秒开场':`把「${idea}」的核心动作放到开场前三秒`,
+    '分镜拆解':`把「${idea}」拆成 3-5 个有节奏的镜头`,
+    '涨粉与变现':`哪类人会被「${idea}」持续留住，再自然衔接转化`,
+    '气质关键词':`用一个词概括「${idea}」想给人的感觉`,
+    '风格参考':`找 2 个气质相近的风格源，抽象成线条/色彩/材质`,
+    '配色字体':`选一个主色＋一个强调色，字体决定冷感还是温度`,
+    '落地载体':`给「${idea}」找一个今天就能出现的宿主场景`,
+    '痛点还是痒点':`「${idea}」解决的是非做不可的痛，还是可做可不做的痒`,
+    '差异化':`现有解法差在哪，让「${idea}」能站得住的那点是什么`,
+    '最小成本试错':`不烧钱的第一步，用现有资源先跑通「${idea}」`,
+    '规模化':`如果「${idea}」成了，复制的杠杆在哪里`,
+    '已有认知挂钩':`「${idea}」能接到你已经会的哪件事上`,
+    '可迁移的点':`把「${idea}」最核心的启发搬到另一个场景会怎样`,
+    '今晚做的小事':`今晚花 20 分钟验证「${idea}」里最不确定的那一环`,
+    '输出检验':`试着用教别人的方式，把「${idea}」讲成一段 100 字`,
+    '内核是什么':`用一句话说出「${idea}」真正想表达的`,
+    '谁能受益':`最会被「${idea}」打动的一类人是谁`,
+    '最小一步':`从「${idea}」里抽出一个今天可执行的微小动作`,
+    '长期价值':`三个月后，「${idea}」还会让你想回头看吗`,
+    'step':`把「${idea}」变成一个今天就能启动的最小步骤`,
   };
-  const out=[`「${topic}」启发：${idea.slice(0,28)}${idea.length>28?'…':''}`];
-  const pool=angles.map(a=>tips[a]||a);
-  pool.forEach((t,i)=>{
-    if(i<pool.length) out.push(`延伸方向${i+1} · ${Array.isArray(t)?t.join(' / '):t}`);
-  });
-  const words=['创意','用户','场景','价值','落地','验证','放大','聚焦','趋势','复利'];
-  out.push('发散标签：'+words.sort(()=>Math.random()-.5).slice(0,4).join(' · '));
-  return {topic, lines:out.slice(0,4)};
+  return prompts[kind]||`围绕「${t.slice(0,20)}」再想深一层`;
+}
+/* 场景类灵感：把一段简单描述补全成完整、有画面感的场景 */
+function divergeScene(t,light,place){
+  const tShort=t.slice(0,26)+(t.length>26?'…':'');
+  const lightMap={清晨:'天色将亮未亮，薄雾还未散尽，一切都带着一种刚醒的安静',午后:'午后光线很亮很直，把影子压得又短又重',黄昏:'黄昏的暖光斜斜打下来，万物都镀上一层橘金',傍晚:'天光正在往暗里沉，蓝与橙混成一片',日落:'太阳正贴着地平线，光线又长又软',夜晚:'夜色已经铺开，灯光开始一点点亮起来',深夜:'深夜里只剩零星灯光，安静得能听见自己的心跳',月光:'月光很白，把轮廓都洗得清晰',雨后:'雨刚停，空气又湿又清，地面还泛着光',雾:'雾把远处都收了起来，近处反而格外清楚',细雨:'雨丝很细，落在耳边几乎听不见',冬:'风很冷，呼出的气都凝成一小团白',undefined:'光在这个时刻恰到好处地漫过来'};
+  const lightTxt=light? (lightMap[light]||('光线是这一刻最抢眼的东西')) : lightMap[undefined];
+  const placeTxt=place||'这个场景';
+  const who=/([一二三四五六七八九十百]+个|一群|一个)?([他她它我你]|男人|女人|老人|孩子|少年|女孩|男孩|女孩|恋人|朋友|陌生人|身影|人)/.exec(t);
+  const subject=who?who[0]:'有人';
+  const act=/坐|站|走|望|看|听|等|回头|低头|抬头|发呆|放空|沉默/.exec(t);
+  const action=act?act[0]:'静静待着';
+  const wherePart = place ? placeTxt+'，' : '';
+  const outline = place ? placeTxt+'的轮廓' : '眼前的一切';
+  const lines=[
+    `${light?light+'时分，':''}${wherePart}${subject}${action}着——${lightTxt}。`,
+    `于是画面就这样在眼前铺开：${outline}在这光线下有了明暗与层次，远近各成一层。`,
+    `风、声音与温度也在这一瞬被记了下来——${/海|江|河|湖/.test(place||'')?'水汽裹着风一阵阵扑到脸上，浪与水流的声音把时间拉得很慢':'空气里是此刻独有的气息，细微的声响让安静显得更具体'}。`,
+    `那层${light?light+'的':'温柔的'}光线落在肩与侧脸上，情绪半明半暗，${/梦|等|想|忘|思念|遗憾|难过|孤独|心事/.test(t)?'好像藏着没说出口的心事':'画面因此有了可以被读懂的余味'}。`,
+    `把它写成开篇/文案/分镜时，就从这个「${light||'此刻'}」切入，让氛围先于情节抵达读者。`,
+  ];
+  return {kind:'scene',topic:'场景补全 · '+ (light||'日常'),lines};
 }
 function addIdea(text,src='text',doDiverge=true){
   const idea={id:uid(),text,date:new Date().toLocaleString('zh-CN',{hour12:false}),src,diverge:null};
@@ -676,8 +940,14 @@ function startVoice(ctx){
   const pill=$('#listenPill');
   pill.classList.remove('hidden');
   $('#pillStop').style.display='flex';
-  $('#listenPillText').textContent= ctx==='task'?'说出要添加的任务…':'说出此刻的灵感…';
-  rec.onstart=()=>{ $('#listenPillText').textContent= ctx==='task'?'正在聆听，说完请点右侧 ■ 停止':'正在聆听你的灵感…'; };
+  const phrases={
+    task:['说出要添加的任务…','正在聆听任务，说完请点 ■ 停止'],
+    idea:['说出此刻的灵感…','正在聆听你的灵感…'],
+    report:['口述今日工作内容…','正在聆听你的工作内容，说完请点 ■ 停止'],
+  };
+  const ph=phrases[ctx]||phrases.idea;
+  $('#listenPillText').textContent=ph[0];
+  rec.onstart=()=>{ $('#listenPillText').textContent=ph[1]; };
   rec.onresult=e=>{
     const parts=[];
     for(let i=0;i<e.results.length;i++){ if(e.results[i].isFinal) parts.push(e.results[i][0].transcript); }
@@ -707,7 +977,17 @@ function stopVoice(){
 }
 function handleVoiceResult(ctx,text){
   if(ctx==='task') openTaskConfirm(parseTaskText(text));
+  else if(ctx==='report') handleReportVoice(text);
   else openIdeaConfirm(text);
+}
+/* 工作总结语音：识别到的内容直接作为一条「语音」条目入库 */
+function handleReportVoice(text){
+  if(!text || !text.trim()) return;
+  if(addLogEntry(text, 'voice')){
+    toast('已录入一条语音内容 🎤');
+  }else{
+    toast('语音识别结果为空','warn');
+  }
 }
 /* 解析语音：抽取标题/周期/子任务/优先级 */
 function parseTaskText(text){
@@ -802,9 +1082,10 @@ function switchModule(mod){
   if(mod==='report'){ renderLogHistory(); renderAiSummary(todayStr()); }
   if(mod==='idea') renderIdeas();
   try{ history.replaceState(null,'','#'+mod); }catch(e){}
-  // scroll to top on tab change
+  // 滚动位置/浮动按钮
   try{ const el=document.querySelector('.app'); if(el&&el.scrollTo) el.scrollTo({top:0,behavior:'instant'}); }catch(e){}
   try{ if(window.scrollTo) window.scrollTo({top:0,behavior:'instant'}); }catch(e){}
+  if(typeof window.updateNewsFab==='function') window.updateNewsFab();
 }
 function renderToday(){
   const n=new Date();
@@ -827,7 +1108,17 @@ function save(){
 function load(){
   const d=Store.read(); if(!d) return;
   if(Array.isArray(d.tasks)) State.tasks=d.tasks;
-  if(d.log) State.log=d.log;
+  if(d.log){
+    State.log=d.log;
+    /* 数据迁移：旧的 string → entries 数组 */
+    Object.keys(State.log).forEach(ds=>{
+      if(typeof State.log[ds]==='string'){
+        const txt=State.log[ds];
+        State.log[ds]= txt ? [{id:uid(),text:txt,time:'00:00',source:'legacy'}] : [];
+      }
+      if(!Array.isArray(State.log[ds])) State.log[ds]=[];
+    });
+  }
   if(d.aiSummaries) State.aiSummaries=d.aiSummaries;
   if(Array.isArray(d.ideas)) State.ideas=d.ideas;
   if(typeof d.ideaAi==='boolean') State.ideaAi=d.ideaAi;
@@ -884,8 +1175,8 @@ function init(){
   const hash=(location.hash||'').replace('#','');
   const target=['news','task','report','idea'].includes(hash)?hash:'news';
   switchModule(target);
-  // 初始填入今日日志
-  if(State.log[todayStr()]){ $('#logInput').value=State.log[todayStr()]; }
+  /* 渲染今日条目列表（用于工作总结分次录入视图） */
+  renderTodayEntries();
   renderTaskArea();
   renderIdeas();
   renderLogHistory();
