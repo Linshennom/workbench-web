@@ -57,6 +57,7 @@ const NEWS_MASTER = [
   {id:'baidu', name:'百度热搜', icon:'❖', src:'sixty', path:'/baidu/hot',  label:'百度'},
   {id:'game',    name:'游戏资讯', icon:'🎮', src:'local', file:'data/game_news.json',    label:'游戏媒体'},
   {id:'finance', name:'财经资讯', icon:'📈', src:'local', file:'data/finance_news.json', label:'财经要闻'},
+  {id:'realtime',name:'实时全网', icon:'⚡', src:'ai', label:'AI 联网检索（推荐 Kimi）'},
 ];
 const API_BASE = { sixty:'https://60s.viki.moe/v2', aihot:'https://aihot.virxact.com/api/v1' };
 
@@ -179,6 +180,12 @@ async function loadCategory(catId, force){
   if(cfg.src==='local'){
     const payload=await fetchJSON(cfg.file);
     items=(payload&&payload.items)||[];
+  }else if(cfg.src==='ai'){
+    /* 「AI 联网检索」分类：内容由设置里启用的大模型实时检索生成。
+       Kimi/Moonshot 模型走内置 $web_search 真联网；其余模型基于知识尽力而为。 */
+    const llm=getActiveAiModel();
+    if(!llm) throw new Error('请先在「设置 → AI 大模型」启用并填好一个模型（Kimi 可获得真联网检索）');
+    items=await callLLMSearchNews(cfg, llm, aiNewsSeeds(catId));
   }else{
     const payload=await fetchJSON(API_BASE[cfg.src]+cfg.path);
     items = cfg.src==='aihot'? normAihot(payload) : normSixty(catId, payload);
@@ -467,37 +474,93 @@ async function doAiNewsRefresh(){
     setTimeout(()=>{ if(!btn.classList.contains('spinning')) $('#newsSyncState').textContent='点击刷新加载热点'; },4000);
   }
 }
-/* 调用大模型实时检索某一分类的最新资讯，要求返回紧凑 JSON 数组 */
+/* 判定该模型配置是否走 Kimi/Moonshot（原生内置 $web_search 联网搜索） */
+function isKimiModel(cfg){
+  const b=String((cfg&&cfg.baseUrl)||'').toLowerCase();
+  return b.includes('moonshot');
+}
+/* 解析大模型返回文本里的 JSON 数组（兼容被文字/代码块包裹的情况） */
+function extractJsonArray(content){
+  if(!content) return [];
+  let m=content.match(/\[[\s\S]*\]/);
+  const arr=JSON.parse(m?m[0]:content);
+  return Array.isArray(arr)?arr:[];
+}
+/* 把通用条目归一化为 App 资讯项 */
+function toAiNewsItems(arr, cfgCat){
+  return (arr||[]).map(x=>({
+    ai:true,
+    t:String(x.t||x.title||'').trim(),
+    d:String(x.d||x.desc||'').trim(),
+    tag:String(x.tag||cfgCat.name||'AI 实时').trim(),
+    url:x.url?String(x.url):'',
+    heat:x.heat?'AI · '+String(x.heat):'',
+    src:'AI 实时',
+  })).filter(n=>n.t.length>0);
+}
+/* 用 Kimi/Moonshot 的 $web_search 原生工具跑一轮对话，返回最终 content。
+   关键：先声明 builtin_function，若返回 tool_calls 就把 arguments 原样回传(role=tool)，
+   循环直到 finish_reason 不再是 tool_calls。 */
+async function kimiChatFetch(url, cfg, messages, maxRounds){
+  const headers={'Content-Type':'application/json','Authorization':'Bearer '+cfg.key};
+  const baseBody={model:cfg.model, temperature:0.4, stream:false};
+  let msgs=messages.slice();
+  for(let round=0; round<maxRounds; round++){
+    const ctl=new AbortController();
+    const timer=setTimeout(()=>ctl.abort(), 25000);
+    try{
+      const r=await fetch(url,{method:'POST',headers,
+        body:JSON.stringify(Object.assign({},baseBody,{messages:msgs,
+          tools:[{type:'builtin_function',function:{name:'$web_search'}}]})),
+        signal:ctl.signal});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j=await r.json();
+      const choice=j && j.choices && j.choices[0];
+      const msg=choice && choice.message;
+      const content=(msg&&msg.content)||'';
+      if(!(msg && msg.tool_calls && msg.tool_calls.length)){
+        return content; // 模型已给出最终回答
+      }
+      // 追加 assistant 消息，并逐个 tool_call 原样回传 arguments
+      msgs.push(msg);
+      msg.tool_calls.forEach(tc=>{
+        msgs.push({role:'tool', tool_call_id:tc.id, name:tc.function.name,
+          content:String(tc.function.arguments||'{}')});
+      });
+    }finally{ clearTimeout(timer); }
+  }
+  throw new Error('搜索轮次过多');
+}
+/* 调用大模型实时检索某一分类的最新资讯，要求返回紧凑 JSON 数组。
+   Kimi/Moonshot 模型原生联网（$web_search）；其余模型保持原逻辑（能力所限多基于模型知识）。 */
 async function callLLMSearchNews(cfgCat, cfg, seeds){
-  const sys='你是一个实时新闻聚合助手。请针对用户指定的资讯分类，联网检索并汇总当前（最近数小时内）真正新鲜的热点资讯。只输出有效的最新条目，避免过时或重复内容。必须严格输出 JSON 数组，格式：[{"t":"标题","d":"一句话摘要","tag":"简短领域标签","url":"来源链接(可空)"}]，6-10 条，按新鲜度/热度排序。不要输出 JSON 以外的任何文字。';
-  const catDesc=`分类：${cfgCat.name}（来源平台：${cfgCat.label||''}）。当前榜单上的种子话题：${(seeds||[]).join('、')}。请基于这些方向检索更新鲜的条目；若你无法真实联网，则基于你的最新知识给出你认为此刻应关注的热点（请在摘要里克制、勿编造具体到分钟的细节）。`;
   const base=String(cfg.baseUrl||'').replace(/\/+$/,'');
   const url=base+'/chat/completions';
-  const ctl=new AbortController();
-  const timer=setTimeout(()=>ctl.abort(), 25000);
-  try{
-    const r=await fetch(url,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
-      body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:catDesc}], temperature:0.5, stream:false}),
-      signal:ctl.signal
-    });
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const j=await r.json();
-    const content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
-    const m=content.match(/\[[\s\S]*\]/);
-    const arr=JSON.parse(m?m[0]:content);
-    if(!Array.isArray(arr)) throw new Error('返回格式不正确');
-    return arr.map((x,i)=>({
-      ai:true,
-      t:String(x.t||x.title||'').trim(),
-      d:String(x.d||x.desc||'').trim(),
-      tag:String(x.tag||cfgCat.name||'AI 实时').trim(),
-      url:x.url?String(x.url):'',
-      heat:x.heat?'AI · '+String(x.heat):'',
-      src:'AI 实时',
-    })).filter(n=>n.t.length>0);
-  }finally{ clearTimeout(timer); }
+  const sys='你是一个实时新闻聚合助手。请针对用户指定的资讯分类，联网检索并汇总当前（最近数小时内）真正新鲜的热点资讯。只输出有效的最新条目，避免过时或重复内容。必须严格输出 JSON 数组，格式：[{"t":"标题","d":"一句话摘要","tag":"简短领域标签","url":"来源链接(可空)"}]，6-10 条，按新鲜度/热度排序。不要输出 JSON 以外的任何文字。';
+  const catDesc=`分类：${cfgCat.name}（来源平台：${cfgCat.label||''}）。当前榜单上的种子话题：${(seeds||[]).join('、')}。请基于这些方向检索更新鲜的条目；若你无法真实联网，则基于你的最新知识给出你认为此刻应关注的热点（请在摘要里克制、勿编造具体到分钟的细节）。`;
+  let content;
+  if(isKimiModel(cfg)){
+    // Kimi：内置 $web_search 真联网，需跑 tool_calls 循环
+    content=await kimiChatFetch(url, cfg,
+      [{role:'system',content:sys},{role:'user',content:catDesc}], 4);
+  }else{
+    const ctl=new AbortController();
+    const timer=setTimeout(()=>ctl.abort(), 25000);
+    try{
+      const r=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
+        body:JSON.stringify({model:cfg.model, messages:[{role:'system',content:sys},{role:'user',content:catDesc}], temperature:0.5, stream:false}),
+        signal:ctl.signal
+      });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j=await r.json();
+      content=(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    }finally{ clearTimeout(timer); }
+  }
+  const arr=extractJsonArray(content);
+  if(!arr.length) throw new Error('返回格式不正确');
+  return toAiNewsItems(arr, cfgCat);
 }
 /* 与当前已展示条目按标题去重，返回真正新增的条目 */
 function mergeAiNews(catId, items){
