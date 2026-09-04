@@ -1,0 +1,22 @@
+{
+  "name": "工作台 · 个人助手",
+  "short_name": "工作台",
+  "description": "资讯·任务·总结·灵感一站式的私人工作台",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f2ea",
+  "theme_color": "#1f1a12",
+  "lang": "zh-CN",
+  "categories": ["productivity","utilities"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "新建任务", "url": "./index.html#task" },
+    { "name": "记录灵感", "url": "./index.html#idea" }
+  ]
+}

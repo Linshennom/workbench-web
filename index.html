@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#1f1a12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工作台">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>工作台 · 个人助手</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Noto+Serif+SC:wght@600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="app" id="app">
+
+  <!-- ============ 顶栏 ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">工</span>
+      <div class="brand-text">
+        <h1>工作台</h1>
+        <span class="brand-sub" id="brandSub">早安 · 今天进展顺利</span>
+      </div>
+    </div>
+    <div class="top-right">
+      <button class="icon-btn" id="themeBtn" title="切换主题">
+        <span id="themeIcon">◐</span>
+      </button>
+      <button class="icon-btn" id="menuBtn" title="设置">
+        <span>⋯</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主题面板（抽屉） -->
+  <aside class="theme-panel hidden" id="themePanel">
+    <div class="panel-title">
+      <h3>选择色调</h3>
+      <button class="icon-btn" id="themeClose">×</button>
+    </div>
+    <div class="theme-options">
+      <button class="theme-card warm active" data-theme="warm">
+        <div class="swatch"></div>
+        <div class="meta">
+          <b>暖色调</b>
+          <span>纸感 · 墨黑 · 信号橙</span>
+        </div>
+      </button>
+      <button class="theme-card cold" data-theme="cold">
+        <div class="swatch"></div>
+        <div class="meta">
+          <b>冷色调</b>
+          <span>冰川 · 深蓝 · 青绿</span>
+        </div>
+      </button>
+      <button class="theme-card night" data-theme="night">
+        <div class="swatch"></div>
+        <div class="meta">
+          <b>夜间模式</b>
+          <span>纯黑 · 弱光护眼</span>
+        </div>
+      </button>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="theme-info">
+      <h4>关于数据</h4>
+      <p>所有任务、日志、灵感均保存在本机浏览器，可随时清除。<br>语音输入需浏览器支持（推荐 Chrome / Edge / Safari 14+）。</p>
+      <button class="btn ghost full" id="clearDataBtn">清除本地数据</button>
+    </div>
+  </aside>
+
+  <!-- 助手问候 -->
+  <section class="hello" id="helloBanner">
+    <div>
+      <p class="hello-greet" id="greetText">早上好</p>
+      <p class="hello-sub">今日 <b id="helloTasks">0</b> 项待办 · <b id="helloDone">0</b> 项已完成</p>
+    </div>
+    <button class="hello-ai" id="quickVoice">🎤 语音录入</button>
+  </section>
+
+  <!-- ============ 模块容器 ============ -->
+  <main class="stage">
+
+    <!-- 模块一：最新资讯 -->
+    <section class="module" id="mod-news">
+      <div class="mod-head">
+        <div>
+          <h2 class="mod-title">最新资讯</h2>
+          <p class="mod-desc" id="newsSyncState">点击刷新加载热点</p>
+        </div>
+        <button class="btn primary" id="newsRefreshBtn"><span class="btn-spin">↻</span> 刷新</button>
+      </div>
+
+      <div class="cat-tabs" id="newsTabs"></div>
+      <div class="news-brief" id="newsBrief"></div>
+      <div class="news-list" id="newsList"></div>
+    </section>
+
+    <!-- 模块二：任务打卡 -->
+    <section class="module hidden" id="mod-task">
+      <div class="mod-head">
+        <div>
+          <h2 class="mod-title">任务打卡</h2>
+          <p class="mod-desc">清单 · 周期 · 日历</p>
+        </div>
+        <div class="mod-actions">
+          <button class="btn ghost" id="taskVoiceBtn">🎤</button>
+          <button class="btn primary" id="taskAddBtn">＋ 任务</button>
+        </div>
+      </div>
+
+      <div class="task-toolbar">
+        <div class="seg" id="taskViewSeg">
+          <button class="seg-btn active" data-tview="list">清单</button>
+          <button class="seg-btn" data-tview="calendar">日历</button>
+        </div>
+        <div class="task-filter" id="taskFilter">
+          <button data-f="all" class="chip active">全部</button>
+          <button data-f="today" class="chip">今日</button>
+          <button data-f="todo" class="chip">未完成</button>
+          <button data-f="done" class="chip">已完成</button>
+        </div>
+      </div>
+
+      <div class="ai-parse hidden" id="taskParseBar">
+        <span class="ai-parse-tag">AI 解析</span>
+        <span id="taskParseText"></span>
+        <div class="ai-parse-actions">
+          <button class="btn mini primary" id="taskParseApply">生成为任务</button>
+          <button class="btn mini ghost" id="taskParseCancel">忽略</button>
+        </div>
+      </div>
+
+      <div class="task-list" id="taskList"></div>
+      <div class="empty hidden" id="taskEmpty">
+        <div class="empty-glyph">☐</div>
+        <h3>还没有任务</h3>
+        <p>点击「＋ 任务」或用语音录入</p>
+      </div>
+
+      <div class="calendar hidden" id="taskCalendar">
+        <div class="cal-head">
+          <button class="btn mini ghost" id="calPrev">‹</button>
+          <h3 id="calTitle"></h3>
+          <button class="btn mini ghost" id="calNext">›</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-legend">
+          <span><i class="dot d-today"></i>今天</span>
+          <span><i class="dot d-task"></i>有任务</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块三：工作总结 -->
+    <section class="module hidden" id="mod-report">
+      <div class="mod-head">
+        <div>
+          <h2 class="mod-title">工作总结</h2>
+          <p class="mod-desc">记录每日 · AI 归纳</p>
+        </div>
+        <div class="mod-actions">
+          <button class="btn ghost" id="logClearBtn">清空</button>
+          <button class="btn primary" id="logSaveBtn">保存并归纳</button>
+        </div>
+      </div>
+
+      <div class="report-editor">
+        <div class="panel-title">
+          <h3>今日日志</h3>
+          <span id="logDate"></span>
+        </div>
+        <textarea id="logInput" rows="5" placeholder="今天做了什么？比如：上午完成需求评审，下午修复登录模块 3 个 bug..."></textarea>
+      </div>
+
+      <div class="report-out">
+        <div class="panel-title">
+          <h3>AI 总结</h3>
+          <span class="ai-badge">智能归纳</span>
+        </div>
+        <div class="report-out-body" id="reportOut">
+          <div class="placeholder">填写并保存后，<br>这里会生成结构化的 AI 总结。</div>
+        </div>
+      </div>
+
+      <div class="period-pick">
+        <select id="reportPeriod">
+          <option value="week">每周</option>
+          <option value="month">每月</option>
+          <option value="quarter">每季度</option>
+        </select>
+        <button class="btn primary full" id="reportGenBtn">自动生成周期总结</button>
+      </div>
+
+      <div class="period-report" id="periodReportWrap">
+        <div class="panel-title">
+          <h3 id="periodReportTitle">周期总结</h3>
+          <button class="btn mini ghost" id="periodReportClose">收起</button>
+        </div>
+        <div id="periodReportBody"></div>
+      </div>
+
+      <div class="log-history-head"><h3>历史日志</h3></div>
+      <div class="log-history" id="logHistory"></div>
+    </section>
+
+    <!-- 模块四：灵感记录 -->
+    <section class="module hidden" id="mod-idea">
+      <div class="mod-head">
+        <div>
+          <h2 class="mod-title">灵感记录</h2>
+          <p class="mod-desc">捕捉一闪而过的念头</p>
+        </div>
+        <div class="mod-actions">
+          <button class="btn ghost" id="ideaVoiceBtn">🎤 语音</button>
+        </div>
+      </div>
+
+      <div class="idea-compose">
+        <textarea id="ideaInput" rows="3" placeholder="此刻的灵感是…"></textarea>
+        <div class="idea-foot">
+          <label class="switch-line">
+            <span class="switch" id="ideaAiSwitch"><i></i></span>
+            <span class="switch-label">AI 发散</span>
+          </label>
+          <button class="btn primary" id="ideaSaveBtn">＋ 记录</button>
+        </div>
+      </div>
+
+      <div class="ai-parse hidden" id="ideaParseBar">
+        <span class="ai-parse-tag">语音识别</span>
+        <span id="ideaParseText"></span>
+        <div class="ai-parse-actions">
+          <button class="btn mini primary" id="ideaParseApply">保存灵感</button>
+          <button class="btn mini ghost" id="ideaParseCancel">忽略</button>
+        </div>
+      </div>
+
+      <div class="idea-board" id="ideaBoard"></div>
+      <div class="empty hidden" id="ideaEmpty">
+        <div class="empty-glyph">✎</div>
+        <h3>还没有灵感</h3>
+        <p>用语音或输入记录，开启 AI 发散可延伸思考</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 底部标签栏（移动导航） -->
+  <nav class="tabbar">
+    <button class="tab active" data-mod="news"><span class="tab-ico">◇</span><span>资讯</span></button>
+    <button class="tab" data-mod="task"><span class="tab-ico">☐</span><span>任务</span></button>
+    <button class="tab" data-mod="report"><span class="tab-ico">▤</span><span>总结</span></button>
+    <button class="tab" data-mod="idea"><span class="tab-ico">✎</span><span>灵感</span></button>
+  </nav>
+
+  <!-- 语音指示浮标 -->
+  <div class="listen-pill hidden" id="listenPill">
+    <span class="pulse"></span><span id="listenPillText">正在聆听…</span>
+  </div>
+
+  <!-- 安装提示 -->
+  <div class="install-tip hidden" id="installTip">
+    <div class="install-card">
+      <div class="install-glyph">📱</div>
+      <h4>添加到主屏幕</h4>
+      <p id="installHint">在浏览器菜单选择「添加到主屏幕」即可像 App 一样使用</p>
+      <button class="btn mini ghost" id="installDismiss">我知道了</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-wrap" id="toastWrap"></div>
+</div>
+
+<!-- ============ 弹窗：手动添加任务 ============ -->
+<div class="modal-mask hidden" id="taskModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>新建任务</h3>
+      <button class="modal-x" id="taskModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>任务标题 *</span>
+        <input id="tmTitle" placeholder="例如：完成产品需求文档" maxlength="60">
+      </label>
+      <div class="field">
+        <span>子任务（可选，回车添加）</span>
+        <div class="subtask-editor" id="tmSubEditor">
+          <input id="tmSubInput" placeholder="输入子任务后回车…" maxlength="40">
+        </div>
+        <div class="chip-row" id="tmSubChips"></div>
+      </div>
+      <div class="field-row">
+        <label class="field">
+          <span>周期</span>
+          <select id="tmPeriod">
+            <option value="none">一次性</option>
+            <option value="daily">每日</option>
+            <option value="weekday">工作日</option>
+            <option value="weekly">每周</option>
+            <option value="monthly">每月</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>日期</span>
+          <input type="date" id="tmDate">
+        </label>
+      </div>
+      <label class="field">
+        <span>优先级</span>
+        <div class="prio-pick" id="tmPrio">
+          <button data-p="1" class="prio-btn p1">高</button>
+          <button data-p="2" class="prio-btn p2 active">中</button>
+          <button data-p="3" class="prio-btn p3">低</button>
+        </div>
+      </label>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="taskModalCancel">取消</button>
+      <button class="btn primary" id="taskModalSave">保存任务</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
