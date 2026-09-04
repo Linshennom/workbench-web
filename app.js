@@ -39,7 +39,6 @@ const State = {
   ideas: [],
   ideaAi:true,
   aiModels:[],
-  githubRepo:'',
   calYear:new Date().getFullYear(),
   calMonth:new Date().getMonth(),
   theme:'warm',
@@ -277,6 +276,27 @@ function renderNews(){
 }
 
 /* 详情：展示真实摘要 + 原文跳转，不再编造正文 */
+/* 微博热搜标题 → 话题领域推断（本地启发式） */
+const WEIBO_TOPIC_MAP=[
+  [/明星|艺人|演员|歌手|导演|剧组|综艺|选秀|红毯|演唱会|粉丝|偶像|CP|出轨|离婚|结婚|恋情|曝光|塌房|爆料|八卦|路透/,'娱乐明星'],
+  [/电影|剧集|电视剧|番剧|动画|动漫|票房|上映|杀青|预告片|影评| Hollywood/,'影视综艺'],
+  [/手机|电脑|芯片|AI|人工智能|自动驾驶|电动车|新能源|科技|数码|发布会|iPhone|华为|小米|特斯拉|元宇宙|直播带货|电商|互联网/,'科技数码'],
+  [/股市|A股|港股|美股|基金|汇率|通胀|央行|降息|加息|房价|楼市|油价|黄金|比特币|经济|财报|IPO|破产|裁员|就业|社保|医保/,'财经商业'],
+  [/地震|洪水|台风|暴雨|暴雪|高温|干旱|火灾|爆炸|事故|灾难|救援|伤亡|遇难|失联/,'灾害事故'],
+  [/疫情|新冠|病毒|疫苗|流感|医院|医生|手术|药物|健康|养生|体检|医保/,'健康医疗'],
+  [/高考|中考|考研|留学|录取|分数|大学|学校|教师|教育|双减|教材/,'教育文化'],
+  [/国足|世界杯|NBA|CBA|奥运|亚运会|冠军|决赛|金牌|球员|教练|转会|联赛|网球|乒乓球/,'体育竞技'],
+  [/外交|美国|日本|韩国|俄罗斯|乌克兰|台湾|香港|中东|北约|联合国|制裁|访华|访华|使馆/,'国际时政'],
+  [/政策|新规|立法|两会|国务院|发改委|税务局|央行|公务员|编制|户籍|限购|限行|补贴/,'政策政务'],
+  [/美食|穿搭|旅游|旅行|酒店|景点|打卡|探店|减肥|健身|瑜伽|护肤|化妆/,'生活方式'],
+];
+function inferWeiboTopics(title){
+  const t=String(title||'');
+  const tags=[];
+  for(const [re,label] of WEIBO_TOPIC_MAP){ if(re.test(t)) tags.push(label); }
+  if(!tags.length) tags.push('社会热点');
+  return [...new Set(tags)].slice(0,3);
+}
 function openNewsDetail(cat,n,rank){
   const cfg=findCat(cat)||NEWS_MASTER[0];
   $('#newsTitle').textContent=n.t;
@@ -288,6 +308,11 @@ function openNewsDetail(cat,n,rank){
   $('#newsDetailHeat').textContent=n.heat||'';
   const paras=[];
   if(n.d) paras.push(n.d);
+  // 微博热搜：加上 AI 话题推断
+  if(cat==='weibo'){
+    const topics=inferWeiboTopics(n.t);
+    paras.push(`【AI 话题洞察】该热搜归属于「${topics.join(' / ')}」领域。微博热搜反映当前大众注意力集中方向，可结合领域关键词判断舆论走向。`);
+  }
   paras.push(n.url
     ? '以上为该条资讯的原始摘要。完整报道请点击下方「阅读原文」跳转至来源页面查看。'
     : '该榜单来源仅提供标题，暂无更多正文。可在原平台搜索该标题查看完整内容。');
@@ -389,7 +414,7 @@ function bindNewsCatSort(){
     placeholder=document.createElement('div');
     placeholder.style.height=row.offsetHeight+'px';
     placeholder.style.marginBottom='8px';
-    placeholder.style.borderRadius='12px';
+    placeholder.style.borderRadius='0px';
     placeholder.style.background='var(--paper-2)';
     placeholder.style.border='2px dashed var(--accent-2)';
     placeholder.style.opacity='.5';
@@ -1399,6 +1424,16 @@ function initTheme(){
       location.reload();
     }
   };
+  /* 点击面板外部关闭 */
+  document.addEventListener('click', e=>{
+    const panel=$('#themePanel');
+    if(!panel || panel.classList.contains('hidden')) return;
+    if(panel.contains(e.target)) return;
+    const btn=$('#themeBtn'), menu=$('#menuBtn');
+    if(btn && (btn===e.target || btn.contains(e.target))) return;
+    if(menu && (menu===e.target || menu.contains(e.target))) return;
+    panel.classList.add('hidden');
+  });
   applyTheme(State.theme);
 }
 /* 设置面板：AI 大模型多模型管理 + GitHub 更新 */
@@ -1483,18 +1518,8 @@ function initSettings(){
     finally{ btn.textContent='测试连接'; btn.disabled=false; }
   };
   renderAiModels();
-  /* --- GitHub 更新入口 --- */
-  ui('#githubRepo').value=State.githubRepo||'';
-  ui('#githubRepo').addEventListener('input',()=>{
-    State.githubRepo=(ui('#githubRepo').value||'').trim(); save();
-  });
-  ui('#goUpdateBtn').onclick=()=>{
-    const repo=State.githubRepo;
-    if(!repo){ toast('请先填写 GitHub 仓库地址','warn'); return; }
-    let url=repo;
-    if(!/^https?:\/\//i.test(url)) url='https://'+url;
-    window.open(url+'/releases/latest','_blank','noopener,noreferrer');
-  };
+  /* --- 检查更新 --- */
+  ui('#checkUpdateBtn').onclick=()=>checkForUpdate();
 }
 
 /* =============================================================
@@ -1529,7 +1554,7 @@ function save(){
   Store.write({
     tasks:State.tasks, log:State.log, aiSummaries:State.aiSummaries,
     ideas:State.ideas, ideaAi:State.ideaAi, theme:State.theme,
-    newsCats:State.newsCats, aiModels:State.aiModels, githubRepo:State.githubRepo,
+    newsCats:State.newsCats, aiModels:State.aiModels,
   });
 }
 function load(){
@@ -1569,17 +1594,58 @@ function load(){
       timeout:Number(d.aiConfig.timeout)||15000,
     }];
   }else State.aiModels=State.aiModels||[];
-  if(typeof d.githubRepo==='string') State.githubRepo=d.githubRepo;
   if(['warm','cold','night'].includes(d.theme)) State.theme=d.theme;
 }
 /* 首次使用：不预置任何示例任务/日志/灵感，保持干净 */
 function seedDemo(){ save(); }
+
+/* 检查更新：重新拉取最新 Service Worker + 缓存，本地数据完全不动 */
+async function checkForUpdate(){
+  if(!('serviceWorker' in navigator)){
+    toast('当前环境不支持自动更新，请直接刷新页面','warn');
+    return;
+  }
+  const btn=$('#checkUpdateBtn');
+  const spin=btn.querySelector('.btn-spin');
+  if(spin) spin.classList.add('spinning');
+  btn.disabled=true;
+  toast('正在检查更新…');
+  try{
+    const reg=await navigator.serviceWorker.getRegistration();
+    if(!reg){ toast('未注册离线服务，刷新即可获取最新内容','warn'); return; }
+    await reg.update();
+    // 给 SW 一点时间去进入 installing
+    await new Promise(r=>setTimeout(r,600));
+    if(reg.installing){
+      toast('发现新版本，正在下载…');
+      reg.installing.addEventListener('statechange',function(){
+        if(this.state==='activated'){
+          toast('更新完成，刷新中…');
+          setTimeout(()=>location.reload(),800);
+        }
+      });
+    }else if(reg.waiting){
+      toast('发现新版本，正在应用…');
+      reg.waiting.postMessage({type:'SKIP_WAITING'});
+    }else{
+      toast('当前已是最新版本');
+    }
+  }catch(e){ toast('检查更新失败：'+(e&&e.message||e),'err'); }
+  finally{
+    if(spin) spin.classList.remove('spinning');
+    btn.disabled=false;
+  }
+}
 
 /* PWA 安装 + service worker */
 let deferredPrompt=null;
 function setupPWA(){
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      toast('已更新到最新版本，刷新中…');
+      setTimeout(()=>location.reload(),800);
+    });
   }
   window.addEventListener('beforeinstallprompt',e=>{
     e.preventDefault();

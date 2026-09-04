@@ -1,5 +1,5 @@
 /* Service Worker - offline cache for the Workbench PWA */
-const CACHE = 'workbench-v8';
+const CACHE = 'workbench-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,10 @@ self.addEventListener('activate', e => {
     caches.keys().then(keys => Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))
     .then(()=>self.clients.claim())
   );
+});
+
+self.addEventListener('message', e => {
+  if(e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', e => {
