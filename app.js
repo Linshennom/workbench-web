@@ -404,10 +404,18 @@ function closeNewsDetail(){ $('#newsModal').classList.add('hidden'); }
 async function doNewsRefresh(from){
   const btn=$('#newsRefreshBtn');
   const fab=$('#newsFab');
+  const cur=State.newsCat;
+  /* 已启用大模型：刷新即走 AI 联网实时拉取当前页（更真、更新），不再回固定旧源。
+     若本次刷新来源是「刷新按钮/FAB」，顶部仍显示加载态与结果文案。 */
+  if(getActiveAiModel()){
+    await aiRefreshCurrent({spin:btn, spin2:fab, label:(findCat(cur)||{}).name});
+    /* 后台仍静默预取其余分类（固定源缓存），保证切换时即时可见 */
+    getNewsCats().forEach(c=>{ if(c.id!==cur) ensureCategory(c.id); });
+    return;
+  }
   btn.classList.add('spinning'); btn.disabled=true;
   fab.classList.add('spinning'); fab.disabled=true;
   $('#newsSyncState').textContent='刷新中…';
-  const cur=State.newsCat;
   try{
     await ensureCategory(cur, true);
     const st=newsState[cur];
@@ -443,36 +451,57 @@ function aiNewsSeeds(catId){
   if(st && st.items) seeds.push(...st.items.slice(0,4).map(n=>n.t));
   return [...new Set(seeds.filter(Boolean))].slice(0,5);
 }
-async function doAiNewsRefresh(){
+/* 用 AI 联网实时「拉取并刷新当前激活分类」的资讯。
+   opts:
+     spin / spin2 : 需要显示加载旋转的元素（如刷新按钮、悬浮按钮）
+     label        : 顶部状态文案里的分类名（默认取当前分类）
+     silent       : 自动刷新用，不弹 toast、不重置默认提示文案
+   返回 {ok, added} ；未启用模型返回 {ok:false, reason:'noModel'}。 */
+async function aiRefreshCurrent(opts){
+  opts=opts||{};
   const cfg=getActiveAiModel();
-  if(!cfg){ toast('请先在「设置 → AI 大模型」里启用并填好一个模型','warn'); return; }
-  const cur=State.newsCat;
-  const ccfg=findCat(cur);
-  const btn=$('#newsAiBtn');
-  btn.classList.add('spinning'); btn.disabled=true;
-  $('#newsSyncState').textContent='AI 正在联网检索最新'+ccfg.name+'…';
+  if(!cfg) return {ok:false, reason:'noModel'};
+  const cur=State.newsCat, ccfg=findCat(cur);
+  if(!ccfg) return {ok:false, reason:'unknown'};
+  const spins=[opts.spin, opts.spin2].filter(Boolean);
+  const setSpin=(on)=>spins.forEach(el=>{ if(el){ el.classList.toggle('spinning',on); el.disabled=on; } });
+  setSpin(true);
+  const name=(opts.label||ccfg.name||'资讯');
+  $('#newsSyncState').textContent='正在用 AI 联网实时拉取最新 '+name+'…';
   try{
     const items=await callLLMSearchNews(ccfg, cfg, aiNewsSeeds(cur));
     const fresh=mergeAiNews(cur, items);
-    if(!fresh.length){
-      $('#newsSyncState').textContent='AI 未发现较新的内容';
-      toast('AI 未发现比当前更新的内容','ok');
-      return;
-    }
     const st=newsState[cur]||(newsState[cur]={items:[],error:null,loading:false,at:Date.now()});
-    st.items=[...fresh, ...(st.items||[]).filter(n=>!n.ai)];
-    st.aiAt=Date.now(); st.at=Date.now();
-    st.error=null; st.loading=false;
+    if(fresh.length) st.items=[...fresh, ...(st.items||[]).filter(n=>!n.ai)];
+    st.aiAt=Date.now(); st.at=Date.now(); st.error=null; st.loading=false;
     renderNews();
-    toast('AI 实时检索到 '+fresh.length+' 条新资讯 ✦','ok');
+    if(fresh.length){
+      $('#newsSyncState').textContent='AI 实时检索到 '+fresh.length+' 条新资讯 ✦';
+      if(!opts.silent) toast('AI 实时检索到 '+fresh.length+' 条新资讯 ✦','ok');
+    }else{
+      $('#newsSyncState').textContent='AI 未发现比当前更新的内容';
+      if(!opts.silent) toast('AI 已联网检索，当前已是最新','ok');
+    }
+    return {ok:true, added:fresh.length};
   }catch(e){
     console.warn('AI 实时搜索失败：', e&&e.message);
     $('#newsSyncState').textContent='AI 检索失败，请重试';
-    toast('AI 检索失败：'+friendlyAiErr(e),'warn');
+    if(!opts.silent) toast('AI 检索失败：'+friendlyAiErr(e),'warn');
+    return {ok:false, reason:(e&&e.message)||e};
   }finally{
-    btn.classList.remove('spinning'); btn.disabled=false;
-    setTimeout(()=>{ if(!btn.classList.contains('spinning')) $('#newsSyncState').textContent='点击刷新加载热点'; },4000);
+    setSpin(false);
+    if(!opts.silent){
+      setTimeout(()=>{
+        const busy=[document.querySelector('#newsAiBtn'),document.querySelector('#newsRefreshBtn'),document.querySelector('#newsFab')]
+          .some(el=>el&&el.classList.contains('spinning'));
+        if(!busy) $('#newsSyncState').textContent='点击刷新加载热点';
+      },4000);
+    }
   }
+}
+function doAiNewsRefresh(){
+  if(!getActiveAiModel()){ toast('请先在「设置 → AI 大模型」里启用并填好一个模型','warn'); return; }
+  return aiRefreshCurrent({spin:document.querySelector('#newsAiBtn')});
 }
 /* 把底层运行时错误转成用户可读文案（超时/中断/网络等），其余透出原信息 */
 function friendlyAiErr(e){
@@ -671,6 +700,31 @@ function mergeAiNews(catId, items){
 }
 function normKey(s){
   return String(s||'').replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g,'').toLowerCase().slice(0,40);
+}
+
+/* ============================================================
+   资讯「每日首次打开自动刷新」：
+   - 每天第一次打开/回到工作台时自动刷新当前资讯页；
+   - 已启用大模型则用 AI 联网实时拉取（更真、更新），否则强制从数据源取新。
+   用 localStorage 记录最后一次自动刷新的日期，同一天只触发一次。
+   ============================================================ */
+const DAILY_AUTO_KEY='wbapp_daily_auto_refresh';
+function lastAutoDate(){
+  try{ return localStorage.getItem(DAILY_AUTO_KEY)||''; }catch(e){ return ''; }
+}
+function markAutoDone(){ try{ localStorage.setItem(DAILY_AUTO_KEY, todayStr()); }catch(e){} }
+async function maybeDailyAutoRefresh(){
+  const today=todayStr();
+  if(lastAutoDate()===today) return;          // 今天已自动刷新过
+  markAutoDone();                              // 先占位，避免重复触发
+  const model=getActiveAiModel();
+  if(model){
+    // 首次打开且已启用 AI：直接走 AI 联网实时刷新当前资讯页
+    await aiRefreshCurrent({silent:true, label:(findCat(State.newsCat)||{}).name});
+  }else{
+    // 未启用 AI：做一次常规强制刷新，避免吃到昨天的旧缓存
+    try{ if(State.newsCat) await ensureCategory(State.newsCat, true); }catch(e){}
+  }
 }
 
 function initNews(){
@@ -1307,7 +1361,9 @@ function renderTodayEntries(){
   arr.forEach(e=>{
     const item=document.createElement('div');
     item.className='entry-item';
-    const srcLabel=e.source==='voice'?'🎤 语音':e.source==='legacy'?'旧日志':'✎ 手动';
+    const srcLabel=(e.source==='voice'
+      ? '<svg class="wb-voice-ico sm" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g fill="currentColor"><rect x="6" y="9" width="3" height="6" rx="1.5"/><rect x="10.5" y="6" width="3" height="9" rx="1.5"/><rect x="15" y="8" width="3" height="7" rx="1.5"/><circle cx="13.5" cy="18.5" r="1.4"/></g></svg> 语音'
+      : e.source==='legacy'?'旧日志':'✎ 手动');
     const srcCls=e.source==='voice'?'s-voice':e.source==='legacy'?'s-legacy':'s-manual';
     item.innerHTML=`<div class="entry-side">
         <span class="entry-time">${esc(e.time||'--:--')}</span>
@@ -1662,7 +1718,7 @@ function renderIdeas(){
     c.innerHTML=`
       <button class="idea-del" title="删除">×</button>
       <div class="idea-meta">
-        <span class="idea-src">${idea.src==='voice'?'🎤 语音':idea.src==='text'?'⌨ 手打':'灵感'}</span>
+        <span class="idea-src">${idea.src==='voice'?'<svg class="wb-voice-ico sm" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g fill="currentColor"><rect x="6" y="9" width="3" height="6" rx="1.5"/><rect x="10.5" y="6" width="3" height="9" rx="1.5"/><rect x="15" y="8" width="3" height="7" rx="1.5"/><circle cx="13.5" cy="18.5" r="1.4"/></g></svg> 语音':idea.src==='text'?'⌨ 手打':'灵感'}</span>
         <span class="idea-date">${esc(idea.date)}</span>
       </div>
       <div class="idea-text">${esc(idea.text)}</div>
@@ -1692,6 +1748,8 @@ let recognition=null;        // 当前活动实例
 let voiceActive=false;       // 防止重复 start 导致 "already started"
 let voiceCtx=null;
 let voiceState='idle';       // idle | listening | result
+/* 微信语音样式的图标（波形+圆点），供动态渲染「语音」标签/按钮时复用 */
+const VOICE_ICO='<svg class="wb-voice-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" stroke="currentColor" stroke-width="1.7"/><g fill="currentColor"><rect x="6.6" y="9.2" width="2.7" height="6" rx="1.35"/><rect x="10.65" y="6.6" width="2.7" height="8.6" rx="1.35"/><rect x="14.7" y="8" width="2.7" height="7.2" rx="1.35"/><circle cx="12" cy="18.2" r="1.55"/></g></svg>';
 
 /* 当前环境是否支持语音识别 */
 function voiceSupported(){
@@ -1814,7 +1872,7 @@ function openReportConfirm(text){
   if(!text || !text.trim()){ toast('语音识别结果为空','warn'); return; }
   window.__voiceReport=text;
   $('#voiceModalTitle').textContent='确认今日工作';
-  $('#voiceModalTag').textContent='🎤 语音识别结果';
+  $('#voiceModalTag').innerHTML=VOICE_ICO+' 语音识别结果';
   $('#voiceModalBody').innerHTML=`
     <div class="vm-label">识别到的内容（可修改）</div>
     <textarea class="vm-edit" id="voiceEditText">${esc(text)}</textarea>
@@ -1857,7 +1915,7 @@ function openTaskConfirm(p){
 function openIdeaConfirm(text){
   window.__voiceIdea=text;
   $('#voiceModalTitle').textContent='确认灵感';
-  $('#voiceModalTag').textContent='🎤 语音识别结果';
+  $('#voiceModalTag').innerHTML=VOICE_ICO+' 语音识别结果';
   $('#voiceModalBody').innerHTML=`
     <div class="vm-label">识别到的内容（可修改）</div>
     <textarea class="vm-edit" id="voiceEditIdea">${esc(text)}</textarea>
@@ -2059,7 +2117,12 @@ function updateHello(){
   $('#greetText').textContent = h<6?'夜深了，注意休息':h<12?'早上好':h<18?'下午好':'晚上好';
   const todos=State.tasks.filter(t=>{ if(t.period==='none')return !t.done&&t.date===todayStr(); return !(t.doneDates||[]).includes(todayStr()); }).length;
   $('#helloTasks').textContent=todos;
-  $('#helloDone').textContent=State.tasks.filter(t=>{ if(t.period==='none')return t.done; return (t.doneDates||[]).includes(todayStr()); }).length;
+  /* 「今日已完成」要按当天口径统计：一次性任务的完成标记跨天会残留，
+     因此只在任务到期当天计入，第二天即不再把昨天的完成算作今日已完成。 */
+  $('#helloDone').textContent=State.tasks.filter(t=>{
+    if(t.period==='none') return t.done && t.date===todayStr();
+    return (t.doneDates||[]).includes(todayStr());
+  }).length;
 }
 function save(){
   Store.write({
@@ -2240,5 +2303,10 @@ function init(){
     renderTaskArea(); renderIdeas(); renderLogHistory();
   }
   setupPWA();
+  /* 每日首次打开/切回前台时自动刷新资讯（当天只一次，详见 maybeDailyAutoRefresh） */
+  setTimeout(maybeDailyAutoRefresh, 900);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible') maybeDailyAutoRefresh();
+  });
 }
 document.addEventListener('DOMContentLoaded', init);

@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Noto+Serif+SC:wght@600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20">
+<link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
 <div class="grain"></div>
@@ -96,7 +96,7 @@
       <p class="hello-greet" id="greetText">早上好</p>
       <p class="hello-sub">今日 <b id="helloTasks">0</b> 项待办 · <b id="helloDone">0</b> 项已完成</p>
     </div>
-    <button class="hello-ai" id="quickVoice">🎤 语音录入</button>
+    <button class="hello-ai wb-voice-btn" id="quickVoice"><svg class="wb-voice-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" stroke="currentColor" stroke-width="1.7"/><g fill="currentColor"><rect x="6.6" y="9.2" width="2.7" height="6" rx="1.35"/><rect x="10.65" y="6.6" width="2.7" height="8.6" rx="1.35"/><rect x="14.7" y="8" width="2.7" height="7.2" rx="1.35"/><circle cx="12" cy="18.2" r="1.55"/></g></svg> 语音录入</button>
   </section>
 
   <!-- ============ 模块容器 ============ -->
@@ -129,7 +129,7 @@
           <p class="mod-desc">清单 · 周期 · 日历</p>
         </div>
         <div class="mod-actions">
-          <button class="btn ghost" id="taskVoiceBtn" data-voice-btn>🎤</button>
+          <button class="btn ghost wb-voice-btn" id="taskVoiceBtn" data-voice-btn><svg class="wb-voice-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" stroke="currentColor" stroke-width="1.7"/><g fill="currentColor"><rect x="6.6" y="9.2" width="2.7" height="6" rx="1.35"/><rect x="10.65" y="6.6" width="2.7" height="8.6" rx="1.35"/><rect x="14.7" y="8" width="2.7" height="7.2" rx="1.35"/><circle cx="12" cy="18.2" r="1.55"/></g></svg></button>
           <button class="btn primary" id="taskAddBtn">＋ 任务</button>
         </div>
       </div>
@@ -185,7 +185,7 @@
           <h3>今日日志</h3>
           <div style="display:flex;align-items:center;gap:8px">
             <span id="logDate"></span>
-            <button class="mic-mini" id="reportVoiceBtn" data-voice-btn title="语音录入">🎤</button>
+            <button class="mic-mini wb-voice-btn" id="reportVoiceBtn" data-voice-btn title="语音录入"><svg class="wb-voice-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" stroke="currentColor" stroke-width="1.7"/><g fill="currentColor"><rect x="6.6" y="9.2" width="2.7" height="6" rx="1.35"/><rect x="10.65" y="6.6" width="2.7" height="8.6" rx="1.35"/><rect x="14.7" y="8" width="2.7" height="7.2" rx="1.35"/><circle cx="12" cy="18.2" r="1.55"/></g></svg></button>
           </div>
         </div>
         <textarea id="logInput" rows="4" placeholder="继续追加今日工作：上午完成了什么，下午解决了什么…随时录入，最后一键生成本日总结。"></textarea>
@@ -239,7 +239,7 @@
           <p class="mod-desc">捕捉一闪而过的念头</p>
         </div>
         <div class="mod-actions">
-          <button class="btn ghost" id="ideaVoiceBtn" data-voice-btn>🎤 语音</button>
+          <button class="btn ghost wb-voice-btn" id="ideaVoiceBtn" data-voice-btn><svg class="wb-voice-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" stroke="currentColor" stroke-width="1.7"/><g fill="currentColor"><rect x="6.6" y="9.2" width="2.7" height="6" rx="1.35"/><rect x="10.65" y="6.6" width="2.7" height="8.6" rx="1.35"/><rect x="14.7" y="8" width="2.7" height="7.2" rx="1.35"/><circle cx="12" cy="18.2" r="1.55"/></g></svg> 语音</button>
         </div>
       </div>
 
@@ -302,7 +302,7 @@
 <div class="modal-mask hidden" id="voiceModal">
   <div class="modal voice-modal">
     <div class="modal-head">
-      <span class="voice-modal-tag" id="voiceModalTag">🎤 语音识别结果</span>
+      <span class="voice-modal-tag" id="voiceModalTag"><svg class="wb-voice-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" stroke="currentColor" stroke-width="1.7"/><g fill="currentColor"><rect x="6.6" y="9.2" width="2.7" height="6" rx="1.35"/><rect x="10.65" y="6.6" width="2.7" height="8.6" rx="1.35"/><rect x="14.7" y="8" width="2.7" height="7.2" rx="1.35"/><circle cx="12" cy="18.2" r="1.55"/></g></svg> 语音识别结果</span>
       <button class="modal-x" id="voiceModalClose">×</button>
     </div>
     <div class="modal-body">
@@ -447,6 +447,6 @@
   </div>
 </div>
 
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>

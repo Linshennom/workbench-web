@@ -211,6 +211,13 @@ b{font-weight:700}
   border:1px solid var(--ink-3);white-space:nowrap;
 }
 .hello-ai:active{background:var(--accent-soft)}
+/* 微信语音样式的语音录入图标（波形 + 圆点，替代话筒） */
+.wb-voice-ico{width:15px;height:15px;display:inline-block;flex:none}
+.wb-voice-ico.sm{width:11px;height:11px;vertical-align:-1px}
+.wb-voice-btn{display:inline-flex!important;align-items:center;justify-content:center;gap:5px;vertical-align:middle}
+.wb-voice-btn .wb-voice-ico{color:inherit}
+/* 纯图标的小语音按钮（任务/总结）让其尺寸贴合图标 */
+#taskVoiceBtn.wb-voice-btn,#reportVoiceBtn.wb-voice-btn{padding:7px;line-height:0}
 
 /* ============================================================
    模块外壳
@@ -595,7 +602,7 @@ textarea:focus{outline:none;border-color:var(--ink)}
 /* ============================================================
    语音确认弹窗
    ============================================================ */
-.voice-modal-tag{font-size:11px;font-weight:700;color:var(--accent-2);background:var(--bar);padding:3px 10px}
+.voice-modal-tag{font-size:11px;font-weight:700;color:var(--accent-2);background:var(--bar);padding:3px 10px;display:inline-flex;align-items:center;gap:4px}
 .voice-modal-title{font-family:var(--serif);font-size:19px;font-weight:900;margin:2px 0 2px}
 .vm-label{font-size:11px;color:var(--ink-3);font-weight:600;margin-bottom:6px;letter-spacing:.5px}
 .vm-idea{
