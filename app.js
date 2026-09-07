@@ -1777,7 +1777,24 @@ function getRecognition(){
   return new SR();
 }
 /* 开始语音输入 */
-function startVoice(ctx){
+/* 一次性麦克风授权：先用 getUserMedia 请求授权并立刻停流。
+   iOS/多数浏览器会把这次授权记住在本站点，之后 SpeechRecognition
+   便不再每次点语音都重复弹「允许使用麦克风」的框。 */
+let micWarmed=false;
+async function warmMicPermission(){
+  if(micWarmed) return true;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+  micWarmed=true;                       // 占位，避免并发重复弹框
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    stream.getTracks().forEach(t=>t.stop());
+    return true;
+  }catch(e){
+    micWarmed=false;                    // 用户拒绝/暂不可用，交给识别再报错
+    return false;
+  }
+}
+async function startVoice(ctx){
   if(voiceActive) return;                         // 已在聆听中，避免重复触发
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ toast(voiceSupportHint(),'err'); return; }
@@ -1840,6 +1857,11 @@ function startVoice(ctx){
       }
     }
   };
+  /* 一次性麦克风授权：首次先 getUserMedia 确权，浏览器会把授权记在本站点，
+     之后重开/再点语音都不再重复弹「允许麦克风」；确权后立即开始识别。
+     若无需确权（不支持 getUserMedia，或已授权过），直接放行开始。 */
+  await warmMicPermission();
+  if(voiceActive!==true || !recognition) return;   // 确权期间可能被 stop/其它打断
   try{ rec.start(); }
   catch(e){
     toast('语音已占用，请稍后再试','warn');
@@ -1942,9 +1964,16 @@ function closeVoiceModal(){ $('#voiceModal').classList.add('hidden'); }
    ============================================================= */
 function applyTheme(t){
   State.theme=t;
+  /* 同时应用到 <html> 与 <body>：让状态栏/浏览器顶部区域(含系统时间那条)与整页背景都随主题换色，
+     避免只有页面中部变色而最上面(html 背景 / theme-color 状态条)保持不变。 */
+  document.documentElement.setAttribute('data-theme', t);
   document.body.setAttribute('data-theme', t);
   const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--theme-color').trim());
+  if(meta){
+    // --theme-color 现在取各主题的页面底色，使状态栏/顶部色带跟随主题
+    const tc=getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim();
+    if(tc) meta.setAttribute('content', tc);
+  }
   const icons={warm:'◐',cold:'❄',night:'☾'};
   $('#themeIcon').textContent=icons[t];
   // 主题卡片高亮

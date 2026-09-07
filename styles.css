@@ -32,7 +32,8 @@
   --danger:#c02020;
   --teal-bg:var(--teal-soft);
   --bar:rgba(0,0,0,.04);
-  --theme-color:#1a1a1a;
+  --theme-color:#f5f3ef;
+  color-scheme:light;
 }
 
 /* ====================================================
@@ -55,7 +56,8 @@
   --danger:#b02030;
   --teal-bg:var(--teal-soft);
   --bar:rgba(0,0,0,.04);
-  --theme-color:#0d1a26;
+  --theme-color:#f0f4f8;
+  color-scheme:light;
 }
 
 /* ====================================================
@@ -79,6 +81,7 @@
   --teal-bg:var(--teal-soft);
   --bar:rgba(255,255,255,.04);
   --theme-color:#111114;
+  color-scheme:dark;
 }
 
 /* ============================================================
@@ -87,6 +90,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+html{background:var(--paper)}
 body{
   font-family:var(--sans);background:var(--paper);color:var(--ink);
   line-height:1.55;letter-spacing:.01em;
