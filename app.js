@@ -51,7 +51,7 @@ const State = {
 /* sources：该分类「AI 实时刷新」时只从这些指定来源联网检索；为空表示全网综合检索。
    规则（用户规定）：
    - 每日热点 → 今日头条/腾讯新闻/央视新闻/网易新闻/每日环球视野（每次刷新实时搜）
-   - 游戏资讯 → GameLook游戏大观/游戏葡萄/触乐/游戏茶馆/游民星空 等
+   - 游戏资讯 → VGTIME 游戏时光/小黑盒/TapTap/VGC/Insider Gaming/Eurogamer（海外 3 家走 RSS 静态快照；国内 3 家为 SPA，仅 AI 实时检索可达）
    - 财经资讯 → 新浪财经/东方财富/央视财经/腾讯财经/网易财经 等财经频道
    - 其余（微博/知乎/抖音/百度/AI前沿/实时全网）→ 直接拉该 APP 自身热点内容（走各自固定源） */
 const NEWS_MASTER = [
@@ -63,7 +63,8 @@ const NEWS_MASTER = [
   {id:'douyin',name:'抖音热榜', icon:'◈', src:'sixty', path:'/douyin',     label:'抖音'},
   {id:'baidu', name:'百度热搜', icon:'❖', src:'sixty', path:'/baidu/hot',  label:'百度'},
   {id:'game',    name:'游戏资讯', icon:'🎮', src:'local', file:'data/game_news.json',
-     sources:['GameLook游戏大观','游戏葡萄','触乐','游戏茶馆','游民星空'], label:'游戏媒体'},
+     sources:['VGTIME 游戏时光','小黑盒','TapTap','VGC','Insider Gaming','Eurogamer'], label:'游戏媒体',
+     srcRules:'游戏资讯取数规则（务必遵守）：国内站 VGTIME 游戏时光 / 小黑盒 / TapTap 只刷各自首页的快讯信息流（按发布时间倒序），绝对不要搜索站名；VGTIME 只看「资讯」栏目往下刷。海外站 VGC、Insider Gaming、Eurogamer 直接进入其 News/快讯板块（Eurogamer 只进 News 板块、避开评测与长文专题）。每条必须标注真实来源媒体名（VGTIME 游戏时光 / 小黑盒 / TapTap / VGC / Insider Gaming / Eurogamer 之一）与真实可点击链接。'},
   {id:'finance', name:'财经资讯', icon:'📈', src:'local', file:'data/finance_news.json',
      sources:['新浪财经','东方财富','央视财经','腾讯财经','网易财经'], label:'财经要闻'},
   {id:'realtime',name:'实时全网', icon:'⚡', src:'ai', sources:[], label:'AI 联网检索（推荐通义千问）'},
@@ -669,8 +670,9 @@ async function callLLMSearchNews(cfgCat, cfg, seeds){
   const srcLine = srcs.length
     ? `本分类【仅允许】从以下指定来源实时检索，不要使用这些来源之外的渠道，也不要凭记忆编造：${srcs.join('、')}。`
     : '本分类请从全网综合实时检索最新热点（不限定单一来源）。';
+  const ruleLine = (cfgCat.srcRules) ? '\n【分类专属取数规则】\n'+cfgCat.srcRules : '';
   const sys=`你是一个实时新闻聚合助手，今天的日期是 ${today}。请联网检索并汇总当前（最近数小时内）真正新鲜、真实的热点资讯。
-${srcLine}
+${srcLine}${ruleLine}
 要求：
 1. 每条资讯必须来自你实时检索到的真实网页，给出真实可点击的来源链接 url，并在 src 字段写明该条实际出处媒体名（必须从指定来源中选取）；
 2. 严格只输出一个 JSON 数组，格式：[{"t":"标题","d":"一句话摘要(20字内)","tag":"简短领域标签","url":"来源链接","src":"实际来源媒体名"}]，6-10 条，按新鲜度/热度排序；

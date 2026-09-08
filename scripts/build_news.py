@@ -12,74 +12,72 @@
 items 字段与 app.js 中 NewsCategories 的归一化结构一致，
 app 端用 src:'local' 加载，无需 CORS。
 """
-import json, subprocess, sys, os, re, html, datetime
+import json, sys, os, re, html, datetime, time
+import feedparser
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PY = sys.executable
-GAME_SKILL = r"C:/Users/admin/.workbuddy/skills/gamenews__skillhub/scripts/fetch_news.py"
 
-# 用户指定的游戏媒体（取 gamenews 技能中实际可 RSS 抓取的那部分）。
-# 注：游戏葡萄、游戏茶馆 该技能无 RSS 源，仅 AI 实时检索路径（app.js 的 sources）可达。
-GAME_SOURCES = ['gamelook', 'chuapp', 'gamersky', 'youxituoluo', 'gcores', 'yystv', 'indienova', '3dmgame', 'gameres', 'ign']
+# ===== 游戏资讯来源（用户指定 2026-09-08，替换旧的 gamenews 技能来源） =====
+# 海外一手快讯：直接订阅 RSS Feed，Feed 自带发布时间，天然按时间倒序
+GAME_RSS = [
+    ('VGC',            'https://www.videogameschronicle.com/feed/'),
+    ('Insider Gaming', 'https://insider-gaming.com/feed/'),
+    ('Eurogamer',      'https://www.eurogamer.net/feed'),
+]
+# 国内快讯站（VGTIME 游戏时光 / 小黑盒 / TapTap）：均为 SPA，或服务端首页仅展示精选旧内容，
+# 无法在本环境稳定直抓，已交由 app 内「AI 实时检索」覆盖（app.js game.sources 已配置这 6 家）。
 
-GAME_TAG = {
-    '机核网 (Gcores)': '机核', '游研社 (Yystv)': '游研社', '触乐网 (Chuapp)': '触乐',
-    '游戏大观 (GameLook)': 'GameLook', 'Indienova (独立游戏)': '独立', '游民星空 (Gamersky)': '游民',
-    '3DMGame': '3DM', '游戏陀螺 (GameGyro)': '陀螺', 'IGN中国': 'IGN', 'GameRes游资网 (GameRes)': 'GameRes',
-}
-
-def short_date(pub):
-    """把 RSS pubDate 转成 MM-DD 展示串"""
-    if not pub:
+def short_date(dtstr):
+    """把 'YYYY-MM-DD HH:MM' 或 'YYYY-MM-DD' 转成 'YY-MM-DD [HH:MM]' 展示串"""
+    if not dtstr:
         return ''
-    m = re.search(r'(\d{1,2})\s+([A-Z][a-z]{2})\s+(\d{4})', pub)
-    if m:
-        months = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
-                  'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
-        return f"{m.group(3)[2:]}-{months.get(m.group(2),'??')}-{int(m.group(1)):02d}"
-    m2 = re.search(r'(\d{4}-\d{2}-\d{2})', pub)
-    if m2:
-        return m2.group(1)[2:]
-    return pub[:10]
+    m = re.search(r'(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?', dtstr)
+    if not m:
+        return dtstr[:10]
+    return (m.group(1)[2:] + (' ' + m.group(2) if m.group(2) else ''))
+
+def _ts(parsed):
+    """feedparser parsed time -> 'YYYY-MM-DD HH:MM' 或 ''"""
+    if not parsed:
+        return ''
+    try:
+        return time.strftime('%Y-%m-%d %H:%M', parsed)
+    except Exception:
+        return ''
 
 def build_game():
     items = []
-    for src_id in GAME_SOURCES:
-        out = subprocess.run([PY, GAME_SKILL, '--source', src_id, '--limit', '6', '--format', 'json'],
-                             capture_output=True, text=True, encoding='utf-8')
-        if out.returncode != 0:
-            print('[game] fetch 失败(%s):' % src_id, out.stderr[:200].replace('\n', ' '), file=sys.stderr)
-            continue
+    # 海外一手快讯：直接订阅 RSS Feed（自带发布时间，天然按时间倒序）
+    for name, url in GAME_RSS:
         try:
-            raw = json.loads(out.stdout)
-        except Exception as e:
-            print('[game] json 解析失败(%s):' % src_id, e, file=sys.stderr)
-            continue
-        for plat in raw:
-            tag = GAME_TAG.get(plat.get('source_name', ''), plat.get('source_name', '游戏'))
-            for it in (plat.get('items') or []):
-                title = (it.get('title') or '').strip()
+            d = feedparser.parse(url)
+            for e in d.entries[:10]:
+                title = (e.get('title') or '').strip()
                 if not title:
                     continue
-                desc = re.sub(r'\s+', ' ', (it.get('description') or '')).strip()
+                ts = _ts(e.get('published_parsed') or e.get('updated_parsed'))
+                summ = re.sub(r'<[^>]+>', '', e.get('summary', '') or '')
+                summ = html.unescape(re.sub(r'\s+', ' ', summ)).strip()[:140]
+                link = (e.get('link') or '').strip()
                 items.append({
-                    't': title,
-                    'd': desc,
-                    'tag': tag,
-                    'url': (it.get('link') or '').strip(),
-                    'heat': '',
-                    'time': short_date(it.get('date') or ''),
-                    'src': plat.get('source_name', '游戏媒体'),
+                    't': title, 'd': summ, 'tag': name, 'url': link, 'heat': '',
+                    'time': short_date(ts), 'src': name, '_ts': ts or '0000',
                 })
-    # 去重（同一标题不同平台）
+        except Exception as ex:
+            print('[game] RSS 失败(%s):' % name, str(ex)[:160], file=sys.stderr)
+    # 排序（时间倒序）+ 去重
+    items.sort(key=lambda x: x.get('_ts', '0000'), reverse=True)
     seen, uniq = set(), []
     for x in items:
         k = x['t'][:40]
         if k in seen:
             continue
-        seen.add(k); uniq.append(x)
+        seen.add(k)
+        uniq.append({kk: vv for kk, vv in x.items() if kk != '_ts'})
     write_json('game_news.json', uniq)
-    print(f'[game] 生成 {len(uniq)} 条')
+    print('[game] 生成 %d 条（VGC / Insider Gaming / Eurogamer RSS）' % len(uniq))
+    print('[game] 注：国内站 VGTIME 游戏时光 / 小黑盒 / TapTap 为 SPA，服务端无法直抓，'
+          '已交由 app 内「AI 实时检索」覆盖（game.sources 已配置这 6 家）')
     return True
 
 def _clean_title(t):

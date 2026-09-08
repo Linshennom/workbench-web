@@ -1,5 +1,5 @@
 {
-  "version": "24",
+  "version": "25",
   "updatedAt": "2026-09-08",
-  "note": "资讯来源路由重构：每日热点/游戏/财经按指定媒体实时检索；修复 AI 刷新雷同"
+  "note": "游戏资讯来源更换：VGTIME(首页快讯)/小黑盒/TapTap/VGC/Insider Gaming/Eurogamer，海外 3 家走 RSS"
 }
