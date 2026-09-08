@@ -48,16 +48,25 @@ const State = {
    模块一：最新资讯
    ============================================================= */
 /* 分类主表：全部为浏览器可直连的真实数据源（CORS 已开放、无需 API Key） */
+/* sources：该分类「AI 实时刷新」时只从这些指定来源联网检索；为空表示全网综合检索。
+   规则（用户规定）：
+   - 每日热点 → 今日头条/腾讯新闻/央视新闻/网易新闻/每日环球视野（每次刷新实时搜）
+   - 游戏资讯 → GameLook游戏大观/游戏葡萄/触乐/游戏茶馆/游民星空 等
+   - 财经资讯 → 新浪财经/东方财富/央视财经/腾讯财经/网易财经 等财经频道
+   - 其余（微博/知乎/抖音/百度/AI前沿/实时全网）→ 直接拉该 APP 自身热点内容（走各自固定源） */
 const NEWS_MASTER = [
-  {id:'daily', name:'每日热点', icon:'◎', src:'sixty', path:'/60s',        label:'60 秒读世界'},
+  {id:'daily', name:'每日热点', icon:'◎', src:'sixty', path:'/60s',
+     sources:['今日头条','腾讯新闻','央视新闻','网易新闻','每日环球视野'], label:'实时多源热点'},
   {id:'ai',    name:'AI 前沿',  icon:'✦', src:'aihot', path:'/items?mode=selected&window=24h&limit=20', label:'AI HOT'},
   {id:'weibo', name:'微博热搜', icon:'❂', src:'sixty', path:'/weibo',      label:'微博'},
   {id:'zhihu', name:'知乎热榜', icon:'◆', src:'sixty', path:'/zhihu',      label:'知乎'},
   {id:'douyin',name:'抖音热榜', icon:'◈', src:'sixty', path:'/douyin',     label:'抖音'},
   {id:'baidu', name:'百度热搜', icon:'❖', src:'sixty', path:'/baidu/hot',  label:'百度'},
-  {id:'game',    name:'游戏资讯', icon:'🎮', src:'local', file:'data/game_news.json',    label:'游戏媒体'},
-  {id:'finance', name:'财经资讯', icon:'📈', src:'local', file:'data/finance_news.json', label:'财经要闻'},
-  {id:'realtime',name:'实时全网', icon:'⚡', src:'ai', label:'AI 联网检索（推荐通义千问）'},
+  {id:'game',    name:'游戏资讯', icon:'🎮', src:'local', file:'data/game_news.json',
+     sources:['GameLook游戏大观','游戏葡萄','触乐','游戏茶馆','游民星空'], label:'游戏媒体'},
+  {id:'finance', name:'财经资讯', icon:'📈', src:'local', file:'data/finance_news.json',
+     sources:['新浪财经','东方财富','央视财经','腾讯财经','网易财经'], label:'财经要闻'},
+  {id:'realtime',name:'实时全网', icon:'⚡', src:'ai', sources:[], label:'AI 联网检索（推荐通义千问）'},
 ];
 const API_BASE = { sixty:'https://60s.viki.moe/v2', aihot:'https://aihot.virxact.com/api/v1' };
 
@@ -447,9 +456,11 @@ async function doNewsRefresh(from){
 function aiNewsSeeds(catId){
   const cfg=findCat(catId);
   const seeds=[cfg?cfg.name:''];
-  const st=newsState[catId];
-  if(st && st.items) seeds.push(...st.items.slice(0,4).map(n=>n.t));
-  return [...new Set(seeds.filter(Boolean))].slice(0,5);
+  const srcs=(cfg&&cfg.sources)||[];
+  if(srcs.length) seeds.push('指定来源：'+srcs.join('、'));
+  /* 关键：不再把当前列表里的旧标题回喂给模型当种子，
+     否则模型每次都返回相似内容（「刷新还是一样」的根因之一） */
+  return [...new Set(seeds.filter(Boolean))].slice(0,6);
 }
 /* 用 AI 联网实时「拉取并刷新当前激活分类」的资讯。
    opts:
@@ -587,7 +598,7 @@ function toAiNewsItems(arr, cfgCat){
     tag:String(x.tag||cfgCat.name||'AI 实时').trim(),
     url:x.url?String(x.url):'',
     heat:x.heat?'AI · '+String(x.heat):'',
-    src:'AI 实时',
+    src:String(x.src||'AI 实时').trim()||'AI 实时',
   })).filter(n=>n.t.length>0);
 }
 /* 用 Kimi/Moonshot 的 $web_search 原生工具跑一轮对话，返回最终 content。
@@ -653,8 +664,18 @@ async function qwenSearchFetch(url, cfg, messages, timeoutMs){
 async function callLLMSearchNews(cfgCat, cfg, seeds){
   const base=normBaseUrl(cfg.baseUrl);
   const url=base+'/chat/completions';
-  const sys='你是一个实时新闻聚合助手。请针对用户指定的资讯分类，联网检索并汇总当前（最近数小时内）真正新鲜的热点资讯。只输出有效的最新条目，避免过时或重复内容。必须严格输出 JSON 数组，格式：[{"t":"标题","d":"一句话摘要","tag":"简短领域标签","url":"来源链接(可空)"}]，6-10 条，按新鲜度/热度排序。不要输出 JSON 以外的任何文字。';
-  const catDesc=`分类：${cfgCat.name}（来源平台：${cfgCat.label||''}）。当前榜单上的种子话题：${(seeds||[]).join('、')}。请基于这些方向检索更新鲜的条目；若你无法真实联网，则基于你的最新知识给出你认为此刻应关注的热点（请在摘要里克制、勿编造具体到分钟的细节）。`;
+  const srcs=(cfgCat.sources&&cfgCat.sources.length)?cfgCat.sources:[];
+  const today=new Date().toISOString().slice(0,10);
+  const srcLine = srcs.length
+    ? `本分类【仅允许】从以下指定来源实时检索，不要使用这些来源之外的渠道，也不要凭记忆编造：${srcs.join('、')}。`
+    : '本分类请从全网综合实时检索最新热点（不限定单一来源）。';
+  const sys=`你是一个实时新闻聚合助手，今天的日期是 ${today}。请联网检索并汇总当前（最近数小时内）真正新鲜、真实的热点资讯。
+${srcLine}
+要求：
+1. 每条资讯必须来自你实时检索到的真实网页，给出真实可点击的来源链接 url，并在 src 字段写明该条实际出处媒体名（必须从指定来源中选取）；
+2. 严格只输出一个 JSON 数组，格式：[{"t":"标题","d":"一句话摘要(20字内)","tag":"简短领域标签","url":"来源链接","src":"实际来源媒体名"}]，6-10 条，按新鲜度/热度排序；
+3. 不要输出 JSON 以外的任何文字；每次都重新联网拉取此刻最新内容，不要复用旧话题。`;
+  const catDesc=`分类：${cfgCat.name}。${(srcs.length?('仅从 '+srcs.join('、')+' 检索最新资讯。'):'')}${(seeds||[]).filter(Boolean).join('；')} 请忽略历史缓存，重新联网检索此刻最新的条目，并确保来源限定在指定媒体。`;
   let content;
   if(isQwenModel(cfg)){
     // 通义千问：enable_search 原生联网，单请求返回最终回答（主推，更快）

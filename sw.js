@@ -2,7 +2,7 @@
 /* 注意：每次部署若只改了页面内容（app.js/index.html/styles.css），
    必须同步把这里的 CACHE 升一档，否则「检查更新」永远检测不到变化。
    更稳妥的做法见 version.json + app.js 的 checkForUpdate 内容版本比对。 */
-const CACHE = 'workbench-v23';
+const CACHE = 'workbench-v24';
 const ASSETS = [
   './',
   './index.html',

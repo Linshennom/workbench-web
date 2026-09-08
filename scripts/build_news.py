@@ -18,6 +18,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
 GAME_SKILL = r"C:/Users/admin/.workbuddy/skills/gamenews__skillhub/scripts/fetch_news.py"
 
+# 用户指定的游戏媒体（取 gamenews 技能中实际可 RSS 抓取的那部分）。
+# 注：游戏葡萄、游戏茶馆 该技能无 RSS 源，仅 AI 实时检索路径（app.js 的 sources）可达。
+GAME_SOURCES = ['gamelook', 'chuapp', 'gamersky', 'youxituoluo', 'gcores', 'yystv', 'indienova', '3dmgame', 'gameres', 'ign']
+
 GAME_TAG = {
     '机核网 (Gcores)': '机核', '游研社 (Yystv)': '游研社', '触乐网 (Chuapp)': '触乐',
     '游戏大观 (GameLook)': 'GameLook', 'Indienova (独立游戏)': '独立', '游民星空 (Gamersky)': '游民',
@@ -39,29 +43,34 @@ def short_date(pub):
     return pub[:10]
 
 def build_game():
-    out = subprocess.run([PY, GAME_SKILL, '--limit', '6', '--format', 'json'],
-                         capture_output=True, text=True, encoding='utf-8')
-    if out.returncode != 0:
-        print('[game] fetch 失败:', out.stderr[:300], file=sys.stderr)
-        return False
-    raw = json.loads(out.stdout)
     items = []
-    for plat in raw:
-        tag = GAME_TAG.get(plat.get('source_name', ''), plat.get('source_name', '游戏'))
-        for it in (plat.get('items') or []):
-            title = (it.get('title') or '').strip()
-            if not title:
-                continue
-            desc = re.sub(r'\s+', ' ', (it.get('description') or '')).strip()
-            items.append({
-                't': title,
-                'd': desc,
-                'tag': tag,
-                'url': (it.get('link') or '').strip(),
-                'heat': '',
-                'time': short_date(it.get('date') or ''),
-                'src': plat.get('source_name', '游戏媒体'),
-            })
+    for src_id in GAME_SOURCES:
+        out = subprocess.run([PY, GAME_SKILL, '--source', src_id, '--limit', '6', '--format', 'json'],
+                             capture_output=True, text=True, encoding='utf-8')
+        if out.returncode != 0:
+            print('[game] fetch 失败(%s):' % src_id, out.stderr[:200].replace('\n', ' '), file=sys.stderr)
+            continue
+        try:
+            raw = json.loads(out.stdout)
+        except Exception as e:
+            print('[game] json 解析失败(%s):' % src_id, e, file=sys.stderr)
+            continue
+        for plat in raw:
+            tag = GAME_TAG.get(plat.get('source_name', ''), plat.get('source_name', '游戏'))
+            for it in (plat.get('items') or []):
+                title = (it.get('title') or '').strip()
+                if not title:
+                    continue
+                desc = re.sub(r'\s+', ' ', (it.get('description') or '')).strip()
+                items.append({
+                    't': title,
+                    'd': desc,
+                    'tag': tag,
+                    'url': (it.get('link') or '').strip(),
+                    'heat': '',
+                    'time': short_date(it.get('date') or ''),
+                    'src': plat.get('source_name', '游戏媒体'),
+                })
     # 去重（同一标题不同平台）
     seen, uniq = set(), []
     for x in items:
