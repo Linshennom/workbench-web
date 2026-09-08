@@ -1703,27 +1703,47 @@ function explainAiErr(e, vendor){
   return null;
 }
 async function addIdea(text,src='text',doDiverge=true){
-  const idea={id:uid(),text,date:new Date().toLocaleString('zh-CN',{hour12:false}),src,diverge:null};
+  const idea={id:uid(),text,title:autoIdeaTitle(text),date:new Date().toLocaleString('zh-CN',{hour12:false}),src,diverge:null};
   if(doDiverge&&State.ideaAi){
     idea.diverge=await computeDiverge(text);
   }
   State.ideas.unshift(idea);
   save(); renderIdeas();
 }
+/* 折叠态：记录哪些灵感已展开（仅会话内有效，不持久化存储） */
+const ideaExpanded=new Set();
+/* 根据灵感正文自动生成一条简短标题，用于折叠态展示，节省空间 */
+function autoIdeaTitle(text){
+  const raw=(text||'').replace(/\s+/g,' ').trim();
+  if(!raw) return '未命名灵感';
+  const head=raw.split(/[\n。！？!?；;]/)[0].trim() || raw;
+  return head.length>22 ? head.slice(0,22)+'…' : head;
+}
 function renderIdeas(){
   const board=$('#ideaBoard'); board.innerHTML='';
   $('#ideaEmpty').classList.toggle('hidden',State.ideas.length>0);
   State.ideas.forEach(idea=>{
-    const c=document.createElement('div'); c.className='idea-card';
+    const title=idea.title||autoIdeaTitle(idea.text);
+    const expanded=ideaExpanded.has(idea.id);
+    const c=document.createElement('div'); c.className='idea-card'+(expanded?'':' collapsed');
     c.innerHTML=`
       <button class="idea-del" title="删除">×</button>
+      <div class="idea-head" role="button" tabindex="0" title="点击展开/折叠">
+        <span class="idea-chevron">${expanded?'▾':'▸'}</span>
+        <span class="idea-title">${esc(title)}</span>
+      </div>
       <div class="idea-meta">
         <span class="idea-src">${idea.src==='voice'?'<svg class="wb-voice-ico sm" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g fill="currentColor"><rect x="6" y="9" width="3" height="6" rx="1.5"/><rect x="10.5" y="6" width="3" height="9" rx="1.5"/><rect x="15" y="8" width="3" height="7" rx="1.5"/><circle cx="13.5" cy="18.5" r="1.4"/></g></svg> 语音':idea.src==='text'?'⌨ 手打':'灵感'}</span>
         <span class="idea-date">${esc(idea.date)}</span>
       </div>
-      <div class="idea-text">${esc(idea.text)}</div>
-      ${idea.diverge?`<div class="idea-diverge">${esc(idea.diverge.lines.join(' · '))}</div>`:''}`;
-    c.querySelector('.idea-del').onclick=()=>{ if(confirm('删除这条灵感？')){ State.ideas=State.ideas.filter(x=>x.id!==idea.id); save(); renderIdeas(); toast('已删除'); } };
+      <div class="idea-body">
+        <div class="idea-text">${esc(idea.text)}</div>
+        ${idea.diverge?`<div class="idea-diverge">${esc(idea.diverge.lines.join(' · '))}</div>`:''}
+      </div>`;
+    c.querySelector('.idea-del').onclick=()=>{ if(confirm('删除这条灵感？')){ State.ideas=State.ideas.filter(x=>x.id!==idea.id); ideaExpanded.delete(idea.id); save(); renderIdeas(); toast('已删除'); } };
+    const toggle=()=>{ if(ideaExpanded.has(idea.id)) ideaExpanded.delete(idea.id); else ideaExpanded.add(idea.id); renderIdeas(); };
+    c.querySelector('.idea-head').addEventListener('click',toggle);
+    c.querySelector('.idea-head').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggle(); } });
     board.appendChild(c);
   });
 }
@@ -1805,57 +1825,55 @@ async function startVoice(ctx){
   pill.classList.remove('hidden');
   $('#pillStop').style.display='flex';
   const phrases={
-    task:['说出要添加的任务…','正在聆听任务，说完请点 ■ 停止'],
-    idea:['说出此刻的灵感…','正在聆听你的灵感…'],
-    report:['口述今日工作内容…','正在聆听你的工作内容，说完请点 ■ 停止'],
+    task:['说出要添加的任务…','正在聆听，说完后点 ■ 停止'],
+    idea:['说出此刻的灵感…','正在聆听，说完后点 ■ 停止'],
+    report:['口述今日工作内容…','正在聆听，说完后点 ■ 停止'],
   };
   const ph=phrases[ctx]||phrases.idea;
   $('#listenPillText').textContent=ph[0];
   rec.lang='zh-CN';
-  // 开启 interimResults：既能实时回显，也能在手动停止/欠稳环境兜底拿到文本
-  rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+  // 持续聆听：不限制时长，全程收集文本；只有用户点 ■ 停止后才识别提交
+  rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
   let finalText='';
   let lastInterim='';
+  let processed=false;          // 防止 onresult/onend/onerror 重复处理
   rec.onstart=()=>{ $('#listenPillText').textContent=ph[1]; };
   rec.onresult=e=>{
     let interim='';
-    for(let i=0;i<e.results.length;i++){
+    for(let i=e.resultIndex;i<e.results.length;i++){
       const r=e.results[i];
       if(r.isFinal) finalText+=r[0].transcript;
       else interim+=r[0].transcript;
     }
-    if(interim){ lastInterim=interim; $('#listenPillText').textContent=interim; }   // 实时显示正在识别的内容
-    if(finalText.trim()){
-      voiceState='result';
-      handleVoiceResult(ctx, finalText.trim());
-      finalText=''; lastInterim=''; // 防止 onend 兜底重复处理
-    }
+    // 实时回显：优先展示已确认文本，其次展示正在识别的临时文本
+    const show=(finalText.trim()||interim);
+    if(show) $('#listenPillText').textContent=show.slice(-80);
+    lastInterim=interim;
   };
+  // 统一在「结束」时提交文本（手动停止 / 浏览器自动结束都走这里）
+  function finish(){
+    if(processed) return;
+    const t=(finalText||lastInterim).trim();
+    if(!t){ pill.classList.add('hidden'); voiceActive=false; voiceState='idle'; return; }
+    processed=true; voiceState='result';
+    handleVoiceResult(ctx, t);
+  }
   rec.onerror=ev=>{
-    pill.classList.add('hidden'); voiceActive=false;
+    if(ev.error==='aborted') return;            // 手动停止，交给 onend 处理
     if(ev.error==='not-allowed') toast('麦克风权限被拒绝，请在浏览器设置中允许','err');
     else if(ev.error==='no-speech') toast('未检测到声音，请靠近麦克风再说一次','warn');
     else if(ev.error==='network') toast('语音服务连接失败，请检查网络或改用键盘','warn');
-    else if(ev.error==='aborted'){ /* 手动停止，忽略 */ }
     else toast('语音识别出错：'+ev.error,'err');
-    if(voiceState==='result') return; // 已成功处理，不再兜底
-    voiceState='idle';
-    const t=(finalText||lastInterim).trim();
-    if(t){ finalText=''; lastInterim=''; handleVoiceResult(ctx,t); }
+    // 出错时也尽量兜底提交已累积的文本
+    if(!processed){
+      const t=(finalText||lastInterim).trim();
+      if(t){ processed=true; voiceState='result'; handleVoiceResult(ctx,t); return; }
+    }
+    pill.classList.add('hidden'); voiceActive=false; voiceState='idle';
   };
   rec.onend=()=>{
     pill.classList.add('hidden'); voiceActive=false;
-    // 结束但未拿到最终文本：用已累积文本兜底（手动停止常走这里）
-    if(voiceState==='listening'){
-      const t=(finalText||lastInterim).trim();
-      if(t){
-        finalText=''; lastInterim='';
-        voiceState='result';
-        handleVoiceResult(ctx, t);
-      } else {
-        voiceState='idle';
-      }
-    }
+    finish();
   };
   /* 一次性麦克风授权：首次先 getUserMedia 确权，浏览器会把授权记在本站点，
      之后重开/再点语音都不再重复弹「允许麦克风」；确权后立即开始识别。
