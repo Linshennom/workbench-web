@@ -1,5 +1,8 @@
 /* Service Worker - offline cache for the Workbench PWA */
-const CACHE = 'workbench-v22';
+/* 注意：每次部署若只改了页面内容（app.js/index.html/styles.css），
+   必须同步把这里的 CACHE 升一档，否则「检查更新」永远检测不到变化。
+   更稳妥的做法见 version.json + app.js 的 checkForUpdate 内容版本比对。 */
+const CACHE = 'workbench-v23';
 const ASSETS = [
   './',
   './index.html',
@@ -40,7 +43,7 @@ self.addEventListener('fetch', e => {
   // 离线时回退到缓存副本，避免空白。
   if(url.pathname.includes('/data/')){
     e.respondWith(
-      fetch(e.request).then(resp=>{
+      fetch(e.request, {cache:'no-cache'}).then(resp=>{
         if(resp && resp.status===200){
           const clone=resp.clone();
           caches.open(CACHE).then(c=>c.put(e.request, clone));
@@ -57,7 +60,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       caches.match(e.request).then(cached=>{
         if(cached) return cached;
-        return fetch(e.request).then(resp=>{
+        return fetch(e.request, {cache:'no-cache'}).then(resp=>{
           if(resp && resp.status===200){
             const clone=resp.clone();
             caches.open(CACHE).then(c=>c.put(e.request, clone));
@@ -72,7 +75,7 @@ self.addEventListener('fetch', e => {
   // 静态资源：缓存优先，后台静默更新；离线时静默回退
   e.respondWith(
     caches.match(e.request).then(cached => {
-      const networkFetch = fetch(e.request).then(resp => {
+      const networkFetch = fetch(e.request, {cache:'no-cache'}).then(resp => {
         if(resp && resp.status===200){
           const clone = resp.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));

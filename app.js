@@ -2220,7 +2220,21 @@ function load(){
 /* 首次使用：不预置任何示例任务/日志/灵感，保持干净 */
 function seedDemo(){ save(); }
 
-/* 检查更新：重新拉取最新 Service Worker + 缓存，本地数据完全不动 */
+/* 版本同步：把远程 version.json 写入本地，供「检查更新」比对 */
+async function syncVersion(){
+  try{
+    const r=await fetch('./version.json?_='+Date.now(),{cache:'no-store'});
+    if(r.ok){
+      const j=await r.json();
+      localStorage.setItem('wb_version', String(j.version));
+    }
+  }catch(e){}
+}
+
+/* 检查更新：重新拉取最新 Service Worker + 缓存，本地数据完全不动
+   双层检测：
+   1) version.json 内容版本比对 —— 即使 sw.js 未变、只改了页面内容，也能被发现；
+   2) 标准 SW 更新流程 —— sw.js 变化时走 installing/waiting 分支。 */
 async function checkForUpdate(){
   if(!('serviceWorker' in navigator)){
     toast('当前环境不支持自动更新，请直接刷新页面','warn');
@@ -2235,16 +2249,47 @@ async function checkForUpdate(){
     const reg=await navigator.serviceWorker.getRegistration();
     if(!reg){ toast('未注册离线服务，刷新即可获取最新内容','warn'); return; }
     await reg.update();
+
+    // 1) 内容版本比对：远程 version.json 与本地不同则强制刷新缓存
+    let force=false;
+    try{
+      const r=await fetch('./version.json?_='+Date.now(),{cache:'no-store'});
+      if(r.ok){
+        const j=await r.json();
+        const remote=String(j.version);
+        const local=localStorage.getItem('wb_version');
+        if(remote && remote!==local){
+          localStorage.setItem('wb_version', remote);
+          force=true;
+        }
+      }
+    }catch(e){}
+
+    if(force){
+      // 清除所有 SW 缓存，强制从网络拉取最新静态资源
+      try{
+        if('caches' in window){
+          const names=await caches.keys();
+          await Promise.all(names.map(n=>caches.delete(n)));
+        }
+      }catch(e){}
+      toast('发现新内容，刷新中…');
+      setTimeout(()=>location.reload(true),600);
+      return;
+    }
+
+    // 2) 标准 SW 更新流程
     // 给 SW 一点时间去进入 installing
     await new Promise(r=>setTimeout(r,600));
     if(reg.installing){
       toast('发现新版本，正在下载…');
-      reg.installing.addEventListener('statechange',function(){
-        if(this.state==='activated'){
+      const onState=()=>{
+        if(reg.installing && reg.installing.state==='activated'){
           toast('更新完成，刷新中…');
-          setTimeout(()=>location.reload(),800);
+          setTimeout(()=>location.reload(true),800);
         }
-      });
+      };
+      reg.installing.addEventListener('statechange', onState);
     }else if(reg.waiting){
       toast('发现新版本，正在应用…');
       reg.waiting.postMessage({type:'SKIP_WAITING'});
@@ -2350,6 +2395,8 @@ function init(){
     renderTaskArea(); renderIdeas(); renderLogHistory();
   }
   setupPWA();
+  /* 同步内容版本号，供「检查更新」比对（首次为空则写入当前版本） */
+  syncVersion();
   /* 每日首次打开/切回前台时自动刷新资讯（当天只一次，详见 maybeDailyAutoRefresh） */
   setTimeout(maybeDailyAutoRefresh, 900);
   document.addEventListener('visibilitychange', ()=>{
